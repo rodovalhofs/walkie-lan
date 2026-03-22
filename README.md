@@ -276,4 +276,4 @@ CI:
 
 ## Estado atual do repositório
 
-O repositório está público e pronto para colaboração. A documentação principal está em português e o projeto já pode ser clonado, instalado e executado localmente.
+Feito por IA.
