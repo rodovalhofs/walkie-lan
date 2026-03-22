@@ -1,0 +1,275 @@
+:root {
+  font-family: "Segoe UI", "Aptos", sans-serif;
+  color: #112031;
+  background:
+    radial-gradient(circle at top right, rgba(217, 125, 84, 0.24), transparent 30%),
+    linear-gradient(180deg, #f3efe4 0%, #e6ddd0 100%);
+  line-height: 1.4;
+  font-weight: 400;
+  color-scheme: light;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+}
+
+button,
+input,
+textarea {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+.page-shell {
+  min-height: 100vh;
+  padding: 32px 20px 64px;
+}
+
+.shell-grid,
+.room-layout {
+  display: grid;
+  gap: 20px;
+  max-width: 1180px;
+  margin: 0 auto;
+}
+
+.shell-grid {
+  grid-template-columns: 1.1fr 1fr;
+}
+
+.hero-card,
+.control-card,
+.room-header-card,
+.ptt-card,
+.presence-card,
+.event-card {
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(17, 32, 49, 0.08);
+  border-radius: 28px;
+  padding: 28px;
+  box-shadow: 0 20px 50px rgba(17, 32, 49, 0.08);
+  backdrop-filter: blur(18px);
+}
+
+.hero-card h1,
+.room-header-card h1 {
+  margin: 10px 0 12px;
+  font-size: clamp(2rem, 4vw, 3.4rem);
+  line-height: 0.95;
+}
+
+.eyebrow {
+  display: inline-flex;
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: #112031;
+  color: #f3efe4;
+  font-size: 0.82rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.feature-strip,
+.status-pill-group,
+.channel-strip,
+.member-list,
+.event-list,
+.action-columns,
+.room-columns {
+  display: grid;
+  gap: 12px;
+}
+
+.feature-strip {
+  padding-left: 18px;
+}
+
+.action-columns,
+.room-columns {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+}
+
+.action-pane {
+  padding: 18px;
+  border-radius: 22px;
+  background: rgba(17, 32, 49, 0.04);
+}
+
+label {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+input,
+textarea {
+  width: 100%;
+  border: 1px solid rgba(17, 32, 49, 0.16);
+  border-radius: 16px;
+  padding: 14px 16px;
+  background: rgba(255, 255, 255, 0.94);
+}
+
+.primary-button,
+.secondary-button,
+.channel-chip,
+.status-pill,
+.member-badge {
+  border: 0;
+  border-radius: 18px;
+}
+
+.primary-button,
+.secondary-button {
+  width: 100%;
+  padding: 14px 18px;
+}
+
+.primary-button {
+  background: #112031;
+  color: #f3efe4;
+}
+
+.secondary-button {
+  background: #d97d54;
+  color: white;
+}
+
+.wide-button {
+  margin-bottom: 16px;
+}
+
+.microcopy {
+  color: rgba(17, 32, 49, 0.7);
+  font-size: 0.92rem;
+}
+
+.error-banner {
+  margin-top: 12px;
+  padding: 14px 16px;
+  border-radius: 16px;
+  background: rgba(169, 50, 38, 0.12);
+  color: #842d20;
+}
+
+.room-header-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.status-pill-group {
+  grid-auto-flow: row;
+}
+
+.status-pill {
+  display: inline-flex;
+  justify-content: center;
+  padding: 10px 14px;
+  background: rgba(17, 32, 49, 0.08);
+}
+
+.status-pill.live,
+.member-badge.live {
+  background: rgba(44, 132, 90, 0.16);
+  color: #176040;
+}
+
+.status-pill.alert {
+  background: rgba(217, 125, 84, 0.18);
+  color: #8d411f;
+}
+
+.channel-chip {
+  display: grid;
+  gap: 4px;
+  text-align: left;
+  padding: 14px 16px;
+  background: rgba(17, 32, 49, 0.06);
+}
+
+.channel-chip.active {
+  background: #112031;
+  color: #f3efe4;
+}
+
+.ptt-button {
+  width: 100%;
+  min-height: 220px;
+  border: 0;
+  border-radius: 32px;
+  background:
+    radial-gradient(circle at top, rgba(255, 255, 255, 0.2), transparent 40%),
+    linear-gradient(180deg, #d97d54, #b55428);
+  color: white;
+  font-size: 1.6rem;
+  display: grid;
+  gap: 8px;
+  place-content: center;
+  box-shadow: inset 0 -14px 24px rgba(0, 0, 0, 0.16);
+}
+
+.ptt-button.pressed {
+  transform: scale(0.985);
+  filter: saturate(1.1);
+}
+
+.member-row,
+.event-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 14px 16px;
+  border-radius: 16px;
+  background: rgba(17, 32, 49, 0.05);
+}
+
+.member-row strong,
+.event-row strong {
+  display: block;
+}
+
+.member-row span,
+.event-row span {
+  color: rgba(17, 32, 49, 0.68);
+  font-size: 0.9rem;
+}
+
+.member-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 12px;
+  background: rgba(17, 32, 49, 0.08);
+}
+
+.audio-dock {
+  display: none;
+}
+
+@media (max-width: 860px) {
+  .shell-grid,
+  .action-columns,
+  .room-columns {
+    grid-template-columns: 1fr;
+  }
+
+  .room-header-card {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .page-shell {
+    padding-inline: 14px;
+  }
+}

@@ -1,0 +1,17 @@
+node_modules/
+dist/
+coverage/
+.DS_Store
+*.log
+*.tsbuildinfo
+*.apk
+*.aab
+.playwright-cli/
+.gradle/
+local.properties
+build/
+.idea/
+/.vscode/
+apps/android-host/.kotlin/
+apps/web-client/vite.config.js
+apps/web-client/vite.config.d.ts

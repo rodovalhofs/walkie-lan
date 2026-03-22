@@ -1,0 +1,18 @@
+{
+  "name": "walkie-lan-hybrid",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "packages/*",
+    "apps/signaling-server",
+    "apps/web-client"
+  ],
+  "scripts": {
+    "build:protocol": "npm run build -w @walkie/protocol",
+    "build": "npm run build --workspaces",
+    "dev:server": "npm run dev -w @walkie/signaling-server",
+    "dev:web": "npm run dev -w @walkie/web-client",
+    "postinstall": "npm run build:protocol",
+    "test": "npm run test --workspaces --if-present"
+  }
+}
