@@ -5,7 +5,7 @@
 - Node.js 20 ou superior
 - npm 10 ou superior
 - JDK 17 ou superior
-- Android Studio com Android SDK, para gerar APK
+- Android Studio com Android SDK
 
 ## Instalar dependencias
 
@@ -17,39 +17,11 @@ npm install
 
 O `postinstall` ja compila o pacote compartilhado `@walkie/protocol`.
 
-## Subir o servidor
+## Fluxo principal: local-first
 
-```bash
-npm run dev:server
-```
+Este e o fluxo recomendado na V2.
 
-Endereco padrao:
-
-```text
-http://localhost:8787
-```
-
-Healthcheck:
-
-```text
-http://localhost:8787/health
-```
-
-## Subir a web app
-
-Em outro terminal:
-
-```bash
-npm run dev:web
-```
-
-Endereco padrao:
-
-```text
-http://localhost:5173
-```
-
-## Gerar o APK Android
+### 1. Gerar o APK
 
 ```powershell
 cd apps/android-host
@@ -62,42 +34,80 @@ Saida:
 apps/android-host/app/build/outputs/apk/debug/app-debug.apk
 ```
 
-## Testar no emulador Android
+### 2. Instalar no Android
 
-No campo do servidor do app Android, use:
-
-```text
-http://10.0.2.2:8787
-```
-
-Esse alias funciona so no emulador Android.
-
-## Testar no telefone real
-
-1. Conecte computador e telefone na mesma rede Wi-Fi
-2. Descubra o IP do computador
-3. Rode servidor e web no computador
-4. No telefone Android, use `http://SEU_IP:8787`
-5. No navegador de outro aparelho, use `http://SEU_IP:5173`
-
-Exemplo:
-
-```text
-http://192.168.1.29:8787
-http://192.168.1.29:5173
-```
-
-## Descobrir o IP no Windows
+Via `adb`:
 
 ```powershell
-ipconfig
+C:\Users\yurir\AppData\Local\Android\Sdk\platform-tools\adb.exe install -r apps\android-host\app\build\outputs\apk\debug\app-debug.apk
 ```
 
-Procure a linha `Endereco IPv4`.
+### 3. Criar sala no APK
 
-## Build geral e testes
+No app:
 
-Build:
+- abra `Modo simples`
+- ajuste apelido, nome da sala e canais se quiser
+- toque em `Criar sala`
+
+### 4. Entrar pelo segundo Android
+
+No outro APK:
+
+- abra o app na mesma rede Wi-Fi
+- toque em atualizar se necessario
+- escolha a sala descoberta na LAN
+
+### 5. Abrir o console no navegador
+
+No host Android:
+
+- use o QR code exibido
+- ou abra a URL local do console mostrada na tela
+
+Esse console funciona bem para:
+
+- iPhone no Safari
+- desktop na mesma rede
+- acompanhamento da sala, participantes e eventos
+
+## Fluxo avancado / legado
+
+Se voce quiser testar compatibilidade com servidor manual:
+
+### Subir o servidor
+
+```bash
+npm run dev:server
+```
+
+Endereco padrao:
+
+```text
+http://localhost:8787
+```
+
+### Subir a web publica/laboratorio
+
+```bash
+npm run dev:web
+```
+
+Endereco padrao:
+
+```text
+http://localhost:5173
+```
+
+### Usar no APK
+
+- abra `Modo avancado`
+- informe a URL manual do servidor
+- crie ou entre por codigo
+
+## Build e testes
+
+Build geral:
 
 ```bash
 npm run build
@@ -109,14 +119,9 @@ Testes:
 npm test
 ```
 
-## Instalar a APK com adb
-
-```powershell
-C:\Users\yurir\AppData\Local\Android\Sdk\platform-tools\adb.exe install -r apps\android-host\app\build\outputs\apk\debug\app-debug.apk
-```
-
 ## Observacoes importantes
 
-- `localhost` no telefone aponta para o proprio telefone, nao para o computador
-- o iPhone funciona melhor com origem HTTPS para uso real do microfone em navegador
-- a web atual e suficiente para testes locais e para Safari em primeiro plano
+- `localhost` no telefone significa o proprio telefone
+- a web nao e mais o fluxo principal de voz
+- o servidor Node nao e mais obrigatorio para o caminho principal
+- o iPhone entra melhor como console auxiliar no fluxo local

@@ -19,6 +19,27 @@ enum class ClientType {
 }
 
 @Serializable
+enum class ClientRole {
+    @SerialName("full_voice")
+    FULL_VOICE,
+
+    @SerialName("console_only")
+    CONSOLE_ONLY,
+
+    @SerialName("experimental_web_voice")
+    EXPERIMENTAL_WEB_VOICE,
+}
+
+@Serializable
+enum class TransportMode {
+    @SerialName("local_lan")
+    LOCAL_LAN,
+
+    @SerialName("remote_signaling")
+    REMOTE_SIGNALING,
+}
+
+@Serializable
 enum class HostStatus {
     @SerialName("online")
     ONLINE,
@@ -29,6 +50,29 @@ enum class HostStatus {
     @SerialName("closed")
     CLOSED,
 }
+
+@Serializable
+data class PeerCapabilities(
+    val canTransmitAudio: Boolean,
+    val canReceiveAudio: Boolean,
+    val supportsLocalJoin: Boolean,
+    val supportsAdvancedWebRtc: Boolean,
+)
+
+@Serializable
+data class RoomCapabilities(
+    val allowsConsoleClients: Boolean,
+    val allowsExperimentalWebVoice: Boolean,
+    val localFirst: Boolean,
+)
+
+@Serializable
+data class HostEndpoint(
+    val hostAddress: String,
+    val port: Int,
+    val baseUrl: String,
+    val consoleUrl: String? = null,
+)
 
 @Serializable
 data class CreateRoomRequest(
@@ -46,6 +90,10 @@ data class RoomCodeReservation(
     val hostSessionToken: String,
     val hostPeerId: String,
     val wsUrl: String,
+    val transportMode: TransportMode = TransportMode.REMOTE_SIGNALING,
+    val hostEndpoint: HostEndpoint? = null,
+    val roomCapabilities: RoomCapabilities? = null,
+    val pairingUrl: String? = null,
 )
 
 @Serializable
@@ -54,6 +102,7 @@ data class JoinRoomRequest(
     val nickname: String,
     val clientType: ClientType,
     val deviceId: String,
+    val requestedRole: ClientRole? = null,
 )
 
 @Serializable
@@ -64,6 +113,13 @@ data class PeerState(
     val deviceId: String,
     val selectedChannelId: String,
     val isHost: Boolean,
+    val role: ClientRole = ClientRole.FULL_VOICE,
+    val capabilities: PeerCapabilities = PeerCapabilities(
+        canTransmitAudio = true,
+        canReceiveAudio = true,
+        supportsLocalJoin = false,
+        supportsAdvancedWebRtc = true,
+    ),
     val isConnected: Boolean,
     val joinedAt: String,
     val lastSeenAt: String,
@@ -97,6 +153,13 @@ data class RoomSnapshot(
     val members: List<PeerState>,
     val activeSpeakerByChannel: Map<String, String?>,
     val hostStatus: HostStatus,
+    val transportMode: TransportMode = TransportMode.REMOTE_SIGNALING,
+    val hostEndpoint: HostEndpoint? = null,
+    val roomCapabilities: RoomCapabilities = RoomCapabilities(
+        allowsConsoleClients = true,
+        allowsExperimentalWebVoice = true,
+        localFirst = false,
+    ),
     val eventLog: List<EventEntry>,
     val capacity: Int,
 )
@@ -107,7 +170,23 @@ data class JoinRoomResponse(
     val peerId: String,
     val peerToken: String,
     val wsUrl: String,
+    val clientRole: ClientRole = ClientRole.FULL_VOICE,
+    val transportMode: TransportMode = TransportMode.REMOTE_SIGNALING,
+    val hostEndpoint: HostEndpoint? = null,
     val snapshot: RoomSnapshot,
+)
+
+@Serializable
+data class LocalPairingPayload(
+    val roomId: String,
+    val roomCode: String,
+    val roomName: String,
+    val hostAddress: String,
+    val port: Int,
+    val protocolVersion: String,
+    val transportMode: TransportMode = TransportMode.LOCAL_LAN,
+    val roomCapabilities: RoomCapabilities,
+    val consoleUrl: String,
 )
 
 @Serializable
@@ -127,6 +206,9 @@ data class ActiveSession(
     val token: String,
     val wsUrl: String,
     val isHost: Boolean,
+    val clientRole: ClientRole = ClientRole.FULL_VOICE,
+    val transportMode: TransportMode = TransportMode.REMOTE_SIGNALING,
+    val hostEndpoint: HostEndpoint? = null,
 )
 
 @JsonClassDiscriminator("kind")

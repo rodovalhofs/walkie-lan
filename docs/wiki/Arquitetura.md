@@ -2,12 +2,23 @@
 
 ## Visao de alto nivel
 
+Na V2, o projeto passou a ter dois trilhos:
+
 ```text
-Android Host <----HTTP----> Servidor de sinalizacao <----HTTP----> Web / Android cliente
-     |                          |
-     |                          +---- WebSocket para eventos e sinalizacao
-     |
-     +------------------------- WebRTC audio ------------------------------+
+Fluxo principal local-first
+
+Android Host
+  |- endpoint HTTP local
+  |- WebSocket local
+  |- anuncio NSD/mDNS
+  |- QR para console local
+  |
+  +--> Android cliente entra por descoberta LAN
+  +--> Navegador abre console auxiliar por QR/link local
+
+Fluxo avancado de compatibilidade
+
+Android / Web <----HTTP + WS----> Servidor Node de sinalizacao
 ```
 
 ## Componentes
@@ -16,43 +27,70 @@ Android Host <----HTTP----> Servidor de sinalizacao <----HTTP----> Web / Android
 
 Responsavel por:
 
-- criar sala
-- entrar em sala
-- manter estado local da sessao
-- agir como host autoritativo do PTT
-- iniciar conexoes WebRTC com outros peers
-- ativar notificacao de foreground service
+- subir a sala local
+- anunciar a sala na LAN
+- criar e entrar em sessao
+- controlar PTT quando host
+- negociar WebRTC
+- exibir QR code
+- operar notificacao de sessao
 
-### Servidor de sinalizacao
+### Servidor Node
 
 Responsavel por:
 
-- validar payloads com Zod
-- criar e localizar salas
-- gerar codigo curto
+- manter o fluxo legado/manual
+- criar salas no modo avancado
 - autenticar peers por token
-- enviar snapshots e eventos
-- encaminhar envelopes de sinalizacao
+- encaminhar mensagens de sinalizacao
+- preservar compatibilidade entre clientes
 
 ### Web app
 
 Responsavel por:
 
-- criar sala em modo host de debug
-- entrar em sala por codigo
-- habilitar microfone no navegador
-- manter conexao WebSocket
-- negociar WebRTC com `simple-peer`
-- tocar os streams remotos
+- apresentar o projeto publicamente
+- orientar o fluxo de uso
+- oferecer laboratorio avancado
+- acompanhar salas como console auxiliar
+- permitir voz web apenas em modo experimental
 
 ### Protocolo compartilhado
 
 Responsavel por:
 
-- definir contratos de request e response
-- definir formato das mensagens de socket
-- centralizar defaults e limites
-- reduzir incompatibilidades entre web e servidor
+- unificar requests e responses
+- definir mensagens de socket
+- explicitar `transportMode`
+- explicitar `clientRole`
+- explicitar capacidades do cliente e da sala
+
+## Modelo de transporte
+
+O sistema diferencia:
+
+- `local_lan`
+- `remote_signaling`
+
+Com isso, a UI e os clientes sabem se a sessao:
+
+- esta no fluxo oficial local
+- ou em fluxo de compatibilidade manual
+
+## Modelo de capacidades
+
+Cada peer tem capacidades como:
+
+- `canTransmitAudio`
+- `canReceiveAudio`
+- `supportsLocalJoin`
+- `supportsAdvancedWebRtc`
+
+Cada sala tem capacidades como:
+
+- `allowsConsoleClients`
+- `allowsExperimentalWebVoice`
+- `localFirst`
 
 ## Modelo de sessao
 
@@ -61,61 +99,43 @@ Uma sala contem:
 - `roomId`
 - `roomCode`
 - `roomName`
-- canais
-- membros
+- `channels`
+- `members`
 - `activeSpeakerByChannel`
-- status do host
-- log de eventos
-- limite de capacidade
-
-Cada membro contem:
-
-- `peerId`
-- apelido
-- tipo do cliente
-- `deviceId`
-- canal selecionado
-- indicador de host
-- indicador de conexao
-- datas de entrada e ultimo contato
+- `hostStatus`
+- `transportMode`
+- `hostEndpoint`
+- `roomCapabilities`
+- `eventLog`
+- `capacity`
 
 ## Modelo de audio
 
-O projeto usa WebRTC audio-only.
+O projeto continua usando WebRTC audio-only.
 
-O audio nao e distribuido para todos o tempo inteiro. Em vez disso:
+Mas a distribuicao segue orientada por canal:
 
-- cada peer mantem conexoes com os outros peers conectados
-- o locutor atual so anexa sua trilha de audio aos peers elegiveis
-- peers elegiveis sao os participantes conectados no mesmo canal
-
-Isso reduz envio desnecessario e combina com o modelo PTT.
+- o locutor atual transmite apenas para os peers elegiveis
+- peers elegiveis sao os conectados no mesmo canal
+- um canal tem um locutor por vez
 
 ## Modelo de PTT
 
-O PTT funciona assim:
+O fluxo central segue:
 
-1. Um cliente envia `talk_request`
-2. O host decide
-3. O host responde com `talk_granted` ou `talk_denied`
-4. Enquanto houver permissao, o locutor transmite
-5. Ao soltar o botao, o cliente envia `talk_release_request`
-6. O host responde com `talk_released`
+1. cliente envia `talk_request`
+2. host decide
+3. host responde `talk_granted` ou `talk_denied`
+4. ao soltar, cliente envia `talk_release_request`
+5. host responde `talk_released`
 
-## Regra importante de encerramento
+## Regra operacional importante
 
-Se o host sai da sala:
+O caminho oficial de voz e o APK Android.
 
-- o servidor marca a sala como fechada
-- envia `room_closed`
-- remove a sala da memoria
+A web agora e tratada assim:
 
-Hoje nao existe migracao automatica de host.
+- `console_only` quando entra como console auxiliar
+- `experimental_web_voice` quando entra pelo laboratorio avancado
 
-## Compatibilidade Android + web
-
-Ao longo da implementacao, o projeto passou a aceitar formatos diferentes de ICE candidate e campos opcionais nulos. Isso foi importante para estabilizar a interoperacao entre:
-
-- Android WebRTC nativo
-- `simple-peer` no navegador
-- validacao Zod no servidor
+Isso evita prometer ao usuario que o navegador substitui a experiencia principal do APK.

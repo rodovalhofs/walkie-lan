@@ -1,10 +1,11 @@
-import type { EventEntry, RoomSnapshot } from "@walkie/protocol";
+import type { ClientRole, EventEntry, RoomSnapshot } from "@walkie/protocol";
 import { useEffect, useRef } from "react";
 
 interface RoomPanelProps {
   snapshot: RoomSnapshot;
   selfPeerId: string;
   roomCode: string;
+  clientRole: ClientRole;
   connected: boolean;
   micReady: boolean;
   isTalking: boolean;
@@ -12,11 +13,34 @@ interface RoomPanelProps {
   onSelectChannel: (channelId: string) => void;
   onPressToTalkStart: () => void;
   onPressToTalkEnd: () => void;
+  onSelectAudioOutput: () => Promise<void>;
+  onAudioOutputSinkError: (message: string) => void;
   remoteStreams: Map<string, MediaStream>;
   notice: string;
+  canSelectAudioOutput: boolean;
+  audioOutputBusy: boolean;
+  audioOutputLabel: string;
+  audioOutputMessage: string;
+  selectedOutputDeviceId: string;
 }
 
-function AudioDock(props: { remoteStreams: Map<string, MediaStream> }) {
+async function applySinkId(audio: HTMLAudioElement, sinkId: string, onError: (message: string) => void) {
+  if (!sinkId || typeof audio.setSinkId !== "function") {
+    return;
+  }
+
+  try {
+    await audio.setSinkId(sinkId);
+  } catch (error) {
+    onError(error instanceof Error ? error.message : "Nao foi possivel trocar a saida de audio.");
+  }
+}
+
+function AudioDock(props: {
+  remoteStreams: Map<string, MediaStream>;
+  selectedOutputDeviceId: string;
+  onSinkError: (message: string) => void;
+}) {
   const containerRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -36,13 +60,19 @@ function AudioDock(props: { remoteStreams: Map<string, MediaStream> }) {
         container.appendChild(audio);
       }
       audio.srcObject = stream;
+      void applySinkId(audio, props.selectedOutputDeviceId, props.onSinkError);
     }
     for (const audio of container.querySelectorAll<HTMLAudioElement>("audio")) {
       if (!knownIds.has(audio.dataset.peer ?? "")) {
         audio.remove();
       }
     }
-  }, [props.remoteStreams]);
+    if (props.selectedOutputDeviceId) {
+      for (const audio of container.querySelectorAll<HTMLAudioElement>("audio")) {
+        void applySinkId(audio, props.selectedOutputDeviceId, props.onSinkError);
+      }
+    }
+  }, [props.onSinkError, props.remoteStreams, props.selectedOutputDeviceId]);
 
   return <div ref={containerRef} className="audio-dock" aria-hidden="true" />;
 }
@@ -53,7 +83,7 @@ function EventList(props: { events: EventEntry[] }) {
       {props.events
         .slice()
         .reverse()
-        .slice(0, 8)
+        .slice(0, 10)
         .map((event) => (
           <article key={event.eventId} className="event-row">
             <strong>{event.summary}</strong>
@@ -67,21 +97,38 @@ function EventList(props: { events: EventEntry[] }) {
 export function RoomPanel(props: RoomPanelProps) {
   const self = props.snapshot.members.find((member) => member.peerId === props.selfPeerId);
   const selectedChannelId = self?.selectedChannelId ?? props.snapshot.channels[0]?.channelId;
+  const selectedChannel = props.snapshot.channels.find((channel) => channel.channelId === selectedChannelId);
+  const consoleOnly = props.clientRole === "console_only" || self?.capabilities.canTransmitAudio === false;
+  const experimentalVoice = props.clientRole === "experimental_web_voice";
 
   return (
-    <div className="room-layout">
-      <AudioDock remoteStreams={props.remoteStreams} />
+    <div className="room-shell">
+      <AudioDock
+        remoteStreams={props.remoteStreams}
+        selectedOutputDeviceId={props.selectedOutputDeviceId}
+        onSinkError={props.onAudioOutputSinkError}
+      />
 
-      <section className="room-header-card">
+      <section className="room-hero">
         <div>
-          <span className="eyebrow">Sala ativa</span>
+          <span className="eyebrow eyebrow-dark">
+            {consoleOnly ? "Console auxiliar" : experimentalVoice ? "Web experimental" : "Sala ativa"}
+          </span>
           <h1>{props.snapshot.roomName}</h1>
           <p>
-            Codigo <strong>{props.roomCode}</strong> · Host {props.snapshot.hostStatus} ·{" "}
+            Codigo <strong>{props.roomCode}</strong> | Modo{" "}
+            {props.snapshot.transportMode === "local_lan" ? "Local LAN" : "Compatibilidade"} |{" "}
             {props.connected ? "conectado" : "offline"}
           </p>
+          <p className="microcopy">
+            Host {props.snapshot.hostStatus}
+            {props.snapshot.hostEndpoint ? ` | Endpoint ${props.snapshot.hostEndpoint.baseUrl}` : ""}
+          </p>
         </div>
-        <div className="status-pill-group">
+        <div className="status-badges">
+          <span className={`status-pill ${props.connected ? "live" : ""}`}>
+            {props.connected ? "Conectado" : "Offline"}
+          </span>
           <span className={`status-pill ${props.micReady ? "live" : ""}`}>
             {props.micReady ? "Microfone pronto" : "Microfone pendente"}
           </span>
@@ -91,9 +138,14 @@ export function RoomPanel(props: RoomPanelProps) {
         </div>
       </section>
 
-      <div className="room-columns">
-        <section className="ptt-card">
-          <div className="channel-strip">
+      <section className="room-grid">
+        <article className="control-panel">
+          <h2>Painel da sessao</h2>
+          <p className="microcopy">
+            Canal atual: <strong>{selectedChannel?.name ?? "Sem canal"}</strong>
+          </p>
+
+          <div className="channel-grid">
             {props.snapshot.channels.map((channel) => (
               <button
                 key={channel.channelId}
@@ -111,26 +163,49 @@ export function RoomPanel(props: RoomPanelProps) {
             ))}
           </div>
 
-          <button className="primary-button wide-button" onClick={props.onEnableMic}>
-            {props.micReady ? "Revalidar microfone" : "Habilitar microfone"}
-          </button>
+          {consoleOnly ? (
+            <div className="console-note">
+              <strong>Este navegador entrou como console auxiliar.</strong>
+              <p>
+                Ele acompanha participantes, eventos e audio recebido, mas nao e o caminho oficial
+                para falar. Use o APK Android para PTT.
+              </p>
+            </div>
+          ) : (
+            <>
+              <button className="primary-button wide-button" onClick={props.onEnableMic}>
+                {props.micReady ? "Revalidar microfone" : "Habilitar microfone"}
+              </button>
+              {props.canSelectAudioOutput ? (
+                <button
+                  className="secondary-button wide-button"
+                  disabled={props.audioOutputBusy}
+                  onClick={props.onSelectAudioOutput}
+                >
+                  {props.audioOutputBusy
+                    ? "Abrindo seletor de audio..."
+                    : `Saida de audio: ${props.audioOutputLabel}`}
+                </button>
+              ) : null}
+              <p className="microcopy">{props.audioOutputMessage}</p>
+              <button
+                className={`ptt-button ${props.isTalking ? "pressed" : ""}`}
+                disabled={!props.micReady}
+                onMouseDown={props.onPressToTalkStart}
+                onMouseUp={props.onPressToTalkEnd}
+                onMouseLeave={props.onPressToTalkEnd}
+                onTouchStart={props.onPressToTalkStart}
+                onTouchEnd={props.onPressToTalkEnd}
+              >
+                <span>Aperte para falar</span>
+                <small>{props.notice}</small>
+              </button>
+            </>
+          )}
+        </article>
 
-          <button
-            className={`ptt-button ${props.isTalking ? "pressed" : ""}`}
-            disabled={!props.micReady}
-            onMouseDown={props.onPressToTalkStart}
-            onMouseUp={props.onPressToTalkEnd}
-            onMouseLeave={props.onPressToTalkEnd}
-            onTouchStart={props.onPressToTalkStart}
-            onTouchEnd={props.onPressToTalkEnd}
-          >
-            <span>Aperte para falar</span>
-            <small>{props.notice}</small>
-          </button>
-        </section>
-
-        <section className="presence-card">
-          <h2>Presenca</h2>
+        <article className="info-card">
+          <h2>Participantes</h2>
           <div className="member-list">
             {props.snapshot.members.map((member) => (
               <article key={member.peerId} className="member-row">
@@ -141,15 +216,15 @@ export function RoomPanel(props: RoomPanelProps) {
                   </span>
                 </div>
                 <span className={`member-badge ${member.isConnected ? "live" : ""}`}>
-                  {member.isHost ? "Host" : member.clientType}
+                  {member.isHost ? "Host" : member.role}
                 </span>
               </article>
             ))}
           </div>
-        </section>
-      </div>
+        </article>
+      </section>
 
-      <section className="event-card">
+      <section className="info-card">
         <h2>Eventos recentes</h2>
         <EventList events={props.snapshot.eventLog} />
       </section>

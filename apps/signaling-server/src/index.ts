@@ -29,7 +29,10 @@ app.post("/api/rooms", (request, response) => {
   }
 
   try {
-    const reservation = registry.createRoom(parseResult.data, resolveWsUrl(request));
+    const reservation = registry.createRoom(parseResult.data, resolveWsUrl(request), {
+      baseUrl: resolveHttpBaseUrl(request),
+      transportMode: "remote_signaling",
+    });
     response.status(201).json(reservation);
   } catch (error) {
     response.status(400).json({ error: getErrorMessage(error) });
@@ -44,7 +47,9 @@ app.post("/api/rooms/join", (request, response) => {
   }
 
   try {
-    const joinResponse = registry.joinRoom(parseResult.data, resolveWsUrl(request));
+    const joinResponse = registry.joinRoom(parseResult.data, resolveWsUrl(request), {
+      baseUrl: resolveHttpBaseUrl(request),
+    });
     response.json(joinResponse);
   } catch (error) {
     response.status(400).json({ error: getErrorMessage(error) });
@@ -110,6 +115,16 @@ function resolveWsUrl(request: Request) {
   const requestProtocol = forwardedProto ?? request.protocol;
   const wsProtocol = requestProtocol === "https" ? "wss" : "ws";
   return `${wsProtocol}://${request.get("host")}/ws`;
+}
+
+function resolveHttpBaseUrl(request: Request) {
+  if (config.publicHttpBaseUrl) {
+    return config.publicHttpBaseUrl;
+  }
+
+  const forwardedProto = request.header("x-forwarded-proto");
+  const requestProtocol = forwardedProto ?? request.protocol;
+  return `${requestProtocol}://${request.get("host")}`;
 }
 
 function getErrorMessage(error: unknown) {

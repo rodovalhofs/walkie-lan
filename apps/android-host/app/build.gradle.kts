@@ -12,8 +12,8 @@ android {
     applicationId = "com.example.walkielan"
     minSdk = 26
     targetSdk = 35
-    versionCode = 4
-    versionName = "0.1.3"
+    versionCode = 6
+    versionName = "0.2.0"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     vectorDrawables {
@@ -77,4 +77,7 @@ dependencies {
   implementation("androidx.media:media:1.7.0")
   implementation("androidx.core:core-splashscreen:1.0.1")
   implementation("io.github.webrtc-sdk:android:144.7559.01")
+  implementation("org.nanohttpd:nanohttpd:2.3.1")
+  implementation("org.nanohttpd:nanohttpd-websocket:2.3.1")
+  implementation("com.google.zxing:core:3.5.3")
 }

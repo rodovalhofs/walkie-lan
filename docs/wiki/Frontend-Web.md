@@ -1,118 +1,88 @@
 # Frontend Web
 
-## Objetivo da web app
+## Novo papel da web
 
-A web app existe para permitir entrada rapida por navegador, com foco especial em Safari/iOS, sem obrigar instalacao de app nativo.
+Na V2, a web deixou de ser apresentada como caminho principal de voz.
 
-## Stack
+Hoje ela existe em duas camadas:
 
-- React
-- Vite
-- `simple-peer`
-- WebRTC
-- WebSocket
-- PWA via `vite-plugin-pwa`
+- site publico
+- laboratorio avancado
 
-## Estado geral da aplicacao
+## Site publico
 
-O arquivo `src/App.tsx` controla:
+A landing publica foi redesenhada para:
 
-- URL do servidor
-- apelido
-- estado de busy
-- erro
-- sessao ativa
-- snapshot
-- status de conexao
-- microfone pronto
-- se esta transmitindo
-- mensagem de aviso
-- streams remotos
+- explicar que o Android e o host oficial
+- orientar o fluxo local-first
+- mostrar que o navegador entra melhor como console auxiliar
+- apontar para a wiki e para o modo avancado apenas quando necessario
 
-## Tela inicial
+Arquivos principais:
 
-Implementada em `src/components/LandingPanel.tsx`.
+- `src/App.tsx`
+- `src/components/LandingPanel.tsx`
+- `src/styles.css`
 
-Ela contem:
+## Laboratorio avancado
 
-- hero principal
-- campo de URL do servidor
-- campo de apelido
-- bloco para criar sala
-- bloco para entrar por codigo
-- banner de erro
+O laboratorio avancado concentra o que ficou fora do fluxo principal:
+
+- URL manual do servidor
+- host web experimental
+- entrada por codigo como `console_only`
+- entrada por codigo como `experimental_web_voice`
+
+Isso reduz confusao para quem abre o site pela primeira vez.
 
 ## Tela da sala
 
-Implementada em `src/components/RoomPanel.tsx`.
+A tela de sala agora diferencia melhor o papel do navegador:
 
-Ela contem:
+- se entrou como `console_only`, a UI assume console auxiliar
+- se entrou como `experimental_web_voice`, a UI permite fluxo experimental de audio
+- o status da sala mostra transporte, endpoint local e contexto da sessao
 
-- cabecalho da sala
-- status de host e conexao
-- status de microfone
-- status de transmissao
-- seletor de canais
-- botao de habilitar microfone
-- botao grande de PTT
-- lista de presenca
-- lista de eventos recentes
-- `AudioDock` invisivel para os elementos `<audio>`
+Arquivo principal:
 
-## Camadas internas
+- `src/components/RoomPanel.tsx`
 
-### `src/lib/api.ts`
+## Audio na web
 
-Faz as chamadas REST:
+A web continua usando:
 
-- `createRoom`
-- `joinRoom`
+- WebRTC
+- WebSocket
+- `simple-peer`
 
-Tambem normaliza a `baseUrl`.
+Mas a promessa mudou:
 
-### `src/lib/signalingClient.ts`
+- receber audio e acompanhar sala continuam validos
+- falar pela web existe apenas em laboratorio experimental
+- o navegador nao substitui o APK Android como caminho oficial
 
-Abre o WebSocket, envia `hello` e valida mensagens recebidas com `socketMessageSchema`.
+## Seletor de saida de audio
 
-### `src/lib/meshManager.ts`
+Quando o navegador suporta:
 
-Gerencia a malha WebRTC no navegador:
+- `selectAudioOutput`
+- `setSinkId`
 
-- habilita microfone com `getUserMedia`
-- cria peers com `simple-peer`
-- serializa `offer`
-- serializa `answer`
-- serializa `ice-candidate`
-- normaliza ICE candidate em formatos diferentes
-- adiciona e remove trilha de audio conforme os peers elegiveis
-- destroi peers desconectados
+a web permite escolher a saida de audio.
+
+Quando nao suporta, mostra que esta usando a saida padrao do aparelho.
 
 ## PWA
 
-Configurada em `vite.config.ts`.
+O PWA continua existindo como apoio:
 
-Hoje a web:
+- abrir rapido o site publico
+- abrir laboratorio avancado
+- acompanhar sala no console auxiliar
 
-- registra service worker imediatamente
-- define manifest
-- roda em `display: standalone`
-- define `theme_color`
-- define `background_color`
-- expoe nome e descricao da app
+## O que a web nao faz no caminho principal
 
-## Modo host web de debug
-
-A web atual ainda pode criar sala em modo de debug.
-
-Nesse modo:
-
-- a web age como host
-- concede ou nega PTT
-- serve para validar o ecossistema antes do fluxo final centrado no APK Android
-
-## Limitacoes atuais da web
-
-- depende do servidor de apoio
-- o melhor caso de uso no iPhone ainda e em primeiro plano
-- nao ha descoberta automatica de salas LAN na web
-- nao ha UI de configuracoes avancadas
+- hospedar a experiencia oficial
+- substituir descoberta LAN no Android
+- prometer PTT robusto no iPhone
+- esconder limitacoes do navegador

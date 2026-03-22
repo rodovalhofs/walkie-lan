@@ -4,12 +4,16 @@ import android.app.Application
 import android.os.Build
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.walkielan.audio.AudioRoute
+import com.example.walkielan.audio.AudioRouteController
 import com.example.walkielan.data.ActiveSession
 import com.example.walkielan.data.ChannelSelectMessage
+import com.example.walkielan.data.ClientRole
 import com.example.walkielan.data.ClientType
 import com.example.walkielan.data.CreateRoomRequest
 import com.example.walkielan.data.ErrorMessage
 import com.example.walkielan.data.EventMessage
+import com.example.walkielan.data.HostEndpoint
 import com.example.walkielan.data.JoinRoomRequest
 import com.example.walkielan.data.PeerJoinedMessage
 import com.example.walkielan.data.PeerLeftMessage
@@ -25,11 +29,18 @@ import com.example.walkielan.data.TalkGrantedMessage
 import com.example.walkielan.data.TalkReleaseRequestMessage
 import com.example.walkielan.data.TalkReleasedMessage
 import com.example.walkielan.data.TalkRequestMessage
+import com.example.walkielan.data.TransportMode
+import com.example.walkielan.local.DiscoveredRoom
+import com.example.walkielan.local.LocalPreferenceStore
+import com.example.walkielan.local.NsdRoomDiscovery
+import com.example.walkielan.localserver.LocalHostRuntime
 import com.example.walkielan.network.SignalingApi
 import com.example.walkielan.network.SignalingSocket
 import com.example.walkielan.rtc.WebRtcController
 import com.example.walkielan.service.WalkieSessionService
 import com.example.walkielan.ui.MainUiState
+import com.example.walkielan.ui.SetupMode
+import java.time.Instant
 import java.util.UUID
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -43,16 +54,179 @@ class MainViewModel(
     private val api = SignalingApi()
     private val socket = SignalingSocket()
     private val rtc = WebRtcController(application.applicationContext)
+    private val preferences = LocalPreferenceStore(application.applicationContext)
+    private val localRuntime = LocalHostRuntime(application.applicationContext)
+    private val audioRoutes = AudioRouteController(application.applicationContext) { snapshot ->
+        _uiState.update {
+            it.copy(
+                selectedAudioRoute = snapshot.selectedRoute,
+                availableAudioRoutes = snapshot.availableRoutes,
+                audioRouteSupported = snapshot.supported,
+                audioRouteNotice = snapshot.notice,
+            )
+        }
+    }
+    private val localDiscovery = NsdRoomDiscovery(application.applicationContext) { rooms ->
+        _uiState.update { state ->
+            val nextNotice = when {
+                state.session != null -> state.notice
+                rooms.isNotEmpty() -> "Encontramos ${rooms.size} sala(s) na rede local."
+                state.discoveryActive -> "Nenhuma sala local encontrada ainda. Toque em atualizar ou crie uma nova."
+                else -> state.notice
+            }
+            state.copy(
+                discoveredRooms = rooms,
+                notice = nextNotice,
+            )
+        }
+    }
     private val deviceId = UUID.randomUUID().toString()
 
-    private val _uiState = MutableStateFlow(MainUiState(serverBaseUrl = defaultServerBaseUrl()))
+    private val _uiState = MutableStateFlow(buildInitialState())
     val uiState: StateFlow<MainUiState> = _uiState.asStateFlow()
 
-    fun updateServerBaseUrl(value: String) = _uiState.update { it.copy(serverBaseUrl = value, errorMessage = null) }
-    fun updateNickname(value: String) = _uiState.update { it.copy(nickname = value, errorMessage = null) }
-    fun updateRoomName(value: String) = _uiState.update { it.copy(roomName = value, errorMessage = null) }
-    fun updateChannelsInput(value: String) = _uiState.update { it.copy(channelsInput = value, errorMessage = null) }
-    fun updateRoomCodeInput(value: String) = _uiState.update { it.copy(roomCodeInput = value.uppercase(), errorMessage = null) }
+    init {
+        startDiscovery(updateNotice = true)
+    }
+
+    fun updateServerBaseUrl(value: String) {
+        preferences.saveAdvancedServerUrl(value)
+        _uiState.update { it.copy(serverBaseUrl = value, errorMessage = null) }
+    }
+
+    fun updateNickname(value: String) {
+        preferences.saveNickname(value)
+        _uiState.update { it.copy(nickname = value, errorMessage = null) }
+    }
+
+    fun updateRoomName(value: String) {
+        preferences.saveRoomName(value)
+        _uiState.update { it.copy(roomName = value, errorMessage = null) }
+    }
+
+    fun updateChannelsInput(value: String) {
+        preferences.saveChannels(value)
+        _uiState.update { it.copy(channelsInput = value, errorMessage = null) }
+    }
+
+    fun updateRoomCodeInput(value: String) {
+        val normalized = value.uppercase()
+        preferences.saveLastJoinedRoomCode(normalized)
+        _uiState.update { it.copy(roomCodeInput = normalized, errorMessage = null) }
+    }
+
+    fun setSetupMode(mode: SetupMode) {
+        _uiState.update { state ->
+            state.copy(
+                setupMode = mode,
+                errorMessage = null,
+                notice = if (mode == SetupMode.SIMPLE) {
+                    "Crie uma sala ou entre por descoberta local."
+                } else {
+                    "Modo avancado aberto para compatibilidade e depuracao."
+                },
+            )
+        }
+    }
+
+    fun refreshLocalRooms() {
+        startDiscovery(updateNotice = true)
+    }
+
+    fun showAudioRoutePicker() = _uiState.update { it.copy(isAudioRoutePickerVisible = true, audioRouteNotice = null) }
+
+    fun hideAudioRoutePicker() = _uiState.update { it.copy(isAudioRoutePickerVisible = false) }
+
+    fun selectAudioRoute(route: AudioRoute) {
+        audioRoutes.selectRoute(route)
+        _uiState.update { it.copy(isAudioRoutePickerVisible = false) }
+    }
+
+    fun createLocalRoom() {
+        val state = _uiState.value
+        viewModelScope.launch {
+            setBusy(true)
+            runCatching {
+                val runtimeInfo = localRuntime.ensureStarted()
+                val reservation = api.createRoom(
+                    baseUrl = runtimeInfo.internalBaseUrl,
+                    payload = CreateRoomRequest(
+                        roomName = state.roomName,
+                        channelNames = parseChannelNames(state.channelsInput),
+                        hostDeviceId = deviceId,
+                        hostNickname = state.nickname,
+                    ),
+                )
+                val hostEndpoint = reservation.hostEndpoint ?: HostEndpoint(
+                    hostAddress = runtimeInfo.hostAddress,
+                    port = runtimeInfo.port,
+                    baseUrl = runtimeInfo.advertisedBaseUrl,
+                    consoleUrl = "${runtimeInfo.advertisedBaseUrl}/console",
+                )
+                val pairingUrl = reservation.pairingUrl ?: buildPairingUrl(reservation.roomCode, hostEndpoint)
+                Triple(reservation, hostEndpoint, pairingUrl)
+            }.onSuccess { (reservation, hostEndpoint, pairingUrl) ->
+                preferences.saveLastJoinedRoomCode(reservation.roomCode)
+                localRuntime.publishRoom(reservation.roomCode, state.roomName)
+                stopDiscovery()
+                connectSession(
+                    session = ActiveSession(
+                        roomId = reservation.roomId,
+                        roomCode = reservation.roomCode,
+                        peerId = reservation.hostPeerId,
+                        token = reservation.hostSessionToken,
+                        wsUrl = reservation.wsUrl,
+                        isHost = true,
+                        clientRole = ClientRole.FULL_VOICE,
+                        transportMode = reservation.transportMode,
+                        hostEndpoint = hostEndpoint,
+                    ),
+                    initialSnapshot = null,
+                    pairingUrl = pairingUrl,
+                )
+            }.onFailure {
+                localRuntime.stop()
+                handleFailure(it)
+            }
+            setBusy(false)
+        }
+    }
+
+    fun joinDiscoveredRoom(room: DiscoveredRoom) {
+        viewModelScope.launch {
+            setBusy(true)
+            runCatching {
+                api.joinRoom(
+                    baseUrl = room.baseUrl,
+                    payload = JoinRoomRequest(
+                        roomCode = room.roomCode,
+                        nickname = _uiState.value.nickname,
+                        clientType = ClientType.ANDROID_NATIVE,
+                        deviceId = deviceId,
+                        requestedRole = ClientRole.FULL_VOICE,
+                    ),
+                )
+            }.onSuccess { join ->
+                preferences.saveLastJoinedRoomCode(room.roomCode)
+                stopDiscovery()
+                connectSession(
+                    session = ActiveSession(
+                        roomId = join.roomId,
+                        roomCode = room.roomCode,
+                        peerId = join.peerId,
+                        token = join.peerToken,
+                        wsUrl = join.wsUrl,
+                        isHost = false,
+                        clientRole = join.clientRole,
+                        transportMode = join.transportMode,
+                        hostEndpoint = join.hostEndpoint,
+                    ),
+                    initialSnapshot = join.snapshot,
+                )
+            }.onFailure(::handleFailure)
+            setBusy(false)
+        }
+    }
 
     fun createRoom() {
         val state = _uiState.value
@@ -71,15 +245,19 @@ class MainViewModel(
                 )
             }.onSuccess { reservation ->
                 connectSession(
-                    ActiveSession(
+                    session = ActiveSession(
                         roomId = reservation.roomId,
                         roomCode = reservation.roomCode,
                         peerId = reservation.hostPeerId,
                         token = reservation.hostSessionToken,
                         wsUrl = reservation.wsUrl,
                         isHost = true,
+                        clientRole = ClientRole.FULL_VOICE,
+                        transportMode = reservation.transportMode,
+                        hostEndpoint = reservation.hostEndpoint,
                     ),
                     initialSnapshot = null,
+                    pairingUrl = reservation.pairingUrl,
                 )
             }.onFailure(::handleFailure)
             setBusy(false)
@@ -99,17 +277,22 @@ class MainViewModel(
                         nickname = state.nickname,
                         clientType = ClientType.ANDROID_NATIVE,
                         deviceId = deviceId,
+                        requestedRole = ClientRole.FULL_VOICE,
                     ),
                 )
             }.onSuccess { join ->
+                preferences.saveLastJoinedRoomCode(state.roomCodeInput)
                 connectSession(
-                    ActiveSession(
+                    session = ActiveSession(
                         roomId = join.roomId,
                         roomCode = state.roomCodeInput,
                         peerId = join.peerId,
                         token = join.peerToken,
                         wsUrl = join.wsUrl,
                         isHost = false,
+                        clientRole = join.clientRole,
+                        transportMode = join.transportMode,
+                        hostEndpoint = join.hostEndpoint,
                     ),
                     initialSnapshot = join.snapshot,
                 )
@@ -158,31 +341,48 @@ class MainViewModel(
         val state = _uiState.value
         val session = state.session ?: return
         val snapshot = state.snapshot ?: return
-        if (!state.isTalking) return
+        if (!state.isTalking) {
+            return
+        }
         val self = snapshot.members.firstOrNull { it.peerId == session.peerId } ?: return
         sendMessage(TalkReleaseRequestMessage(peerId = session.peerId, channelId = self.selectedChannelId))
         _uiState.update { it.copy(notice = "Liberando o canal...") }
     }
 
     fun disconnect() {
+        val currentSession = _uiState.value.session
+        if (currentSession?.isHost == true) {
+            runCatching {
+                sendMessage(RoomClosedMessage("Sala encerrada pelo host Android."))
+            }
+        }
         socket.disconnect()
         rtc.resetSession()
+        audioRoutes.stopSession()
         WalkieSessionService.stop(getApplication())
-        _uiState.value = MainUiState(
-            serverBaseUrl = _uiState.value.serverBaseUrl,
-            nickname = _uiState.value.nickname,
-            roomName = _uiState.value.roomName,
-            channelsInput = _uiState.value.channelsInput,
-            roomCodeInput = _uiState.value.roomCodeInput,
+        if (currentSession?.isHost == true && currentSession.transportMode == TransportMode.LOCAL_LAN) {
+            localRuntime.stop()
+        }
+        resetToSetup(
+            notice = if (currentSession?.isHost == true) {
+                "Sala encerrada. Pronto para criar outra."
+            } else {
+                "Voce saiu da sala."
+            },
         )
+        startDiscovery(updateNotice = false)
     }
 
     private fun connectSession(
         session: ActiveSession,
         initialSnapshot: RoomSnapshot?,
+        pairingUrl: String? = null,
     ) {
         socket.disconnect()
         rtc.resetSession()
+        audioRoutes.stopSession()
+        audioRoutes.startSession()
+        val effectivePairingUrl = pairingUrl ?: buildPairingUrl(session.roomCode, initialSnapshot?.hostEndpoint ?: session.hostEndpoint)
         _uiState.update {
             it.copy(
                 session = session,
@@ -190,11 +390,22 @@ class MainViewModel(
                 connected = false,
                 micReady = false,
                 isTalking = false,
-                notice = "Sessao conectando...",
+                localHostBaseUrl = initialSnapshot?.hostEndpoint?.baseUrl ?: session.hostEndpoint?.baseUrl,
+                localConsoleUrl = effectivePairingUrl,
+                pairingUrl = effectivePairingUrl,
+                isAudioRoutePickerVisible = false,
+                notice = if (session.transportMode == TransportMode.LOCAL_LAN) {
+                    "Sala local conectando..."
+                } else {
+                    "Sessao conectando..."
+                },
                 errorMessage = null,
             )
         }
-        initialSnapshot?.let(::ensurePeerConnections)
+        initialSnapshot?.let {
+            syncSessionMetadata(it)
+            ensurePeerConnections(it)
+        }
 
         socket.connect(
             session = session,
@@ -207,10 +418,11 @@ class MainViewModel(
                 }
             },
             onClosed = {
+                audioRoutes.stopSession()
                 _uiState.update { it.copy(connected = false, notice = "Conexao encerrada.") }
                 WalkieSessionService.stop(getApplication())
             },
-            onFailure = ::handleFailure,
+            onFailure = ::handleSocketFailure,
         )
     }
 
@@ -218,6 +430,7 @@ class MainViewModel(
         _uiState.update { it.copy(connected = true) }
         when (message) {
             is RoomSnapshotMessage -> {
+                syncSessionMetadata(message.snapshot)
                 _uiState.update { it.copy(snapshot = message.snapshot, notice = "Sala sincronizada.") }
                 ensurePeerConnections(message.snapshot)
                 WalkieSessionService.start(getApplication(), message.snapshot.roomName)
@@ -251,7 +464,11 @@ class MainViewModel(
                 _uiState.update { state ->
                     val snapshot = state.snapshot ?: return@update state
                     val members = snapshot.members.map { member ->
-                        if (member.peerId == message.peerId) member.copy(selectedChannelId = message.channelId) else member
+                        if (member.peerId == message.peerId) {
+                            member.copy(selectedChannelId = message.channelId)
+                        } else {
+                            member
+                        }
                     }
                     state.copy(snapshot = snapshot.copy(members = members))
                 }
@@ -329,8 +546,13 @@ class MainViewModel(
             }
 
             is RoomClosedMessage -> {
-                _uiState.update { it.copy(connected = false, notice = message.reason) }
+                audioRoutes.stopSession()
                 WalkieSessionService.stop(getApplication())
+                if (_uiState.value.session?.isHost == true && _uiState.value.session?.transportMode == TransportMode.LOCAL_LAN) {
+                    localRuntime.stop()
+                }
+                resetToSetup(message.reason)
+                startDiscovery(updateNotice = false)
             }
 
             is ErrorMessage -> {
@@ -338,6 +560,7 @@ class MainViewModel(
             }
 
             is SyncSnapshotMessage -> {
+                syncSessionMetadata(message.snapshot)
                 _uiState.update { it.copy(snapshot = message.snapshot) }
                 ensurePeerConnections(message.snapshot)
             }
@@ -352,7 +575,9 @@ class MainViewModel(
         val state = _uiState.value
         val session = state.session ?: return
         val snapshot = state.snapshot ?: return
-        if (!session.isHost) return
+        if (!session.isHost) {
+            return
+        }
 
         when (message) {
             is TalkRequestMessage -> {
@@ -363,7 +588,7 @@ class MainViewModel(
                         TalkGrantedMessage(
                             channelId = message.channelId,
                             holderPeerId = message.peerId,
-                            grantedAt = java.time.Instant.now().toString(),
+                            grantedAt = Instant.now().toString(),
                             queueVersion = version,
                         ),
                     )
@@ -401,7 +626,7 @@ class MainViewModel(
                 localPeerId = session.peerId,
                 remotePeerId = member.peerId,
                 onSignal = ::sendSignal,
-                onRemoteAudio = { /* Audio playout is handled by WebRTC on Android. */ },
+                onRemoteAudio = { },
             )
         }
     }
@@ -457,6 +682,76 @@ class MainViewModel(
         socket.send(message)
     }
 
+    private fun startDiscovery(updateNotice: Boolean) {
+        runCatching {
+            localDiscovery.refresh()
+            _uiState.update { state ->
+                state.copy(
+                    discoveryActive = true,
+                    errorMessage = if (updateNotice) null else state.errorMessage,
+                    notice = if (updateNotice) {
+                        "Procurando salas na rede local..."
+                    } else {
+                        state.notice
+                    },
+                )
+            }
+        }.onFailure(::handleFailure)
+    }
+
+    private fun stopDiscovery() {
+        localDiscovery.stop()
+        _uiState.update { it.copy(discoveryActive = false) }
+    }
+
+    private fun syncSessionMetadata(snapshot: RoomSnapshot) {
+        val pairingUrl = buildPairingUrl(snapshot.roomCode, snapshot.hostEndpoint)
+        _uiState.update {
+            it.copy(
+                localHostBaseUrl = snapshot.hostEndpoint?.baseUrl,
+                localConsoleUrl = pairingUrl,
+                pairingUrl = pairingUrl,
+            )
+        }
+    }
+
+    private fun resetToSetup(notice: String) {
+        _uiState.update { state ->
+            state.copy(
+                session = null,
+                snapshot = null,
+                connected = false,
+                micReady = false,
+                isTalking = false,
+                localHostBaseUrl = null,
+                localConsoleUrl = null,
+                pairingUrl = null,
+                isAudioRoutePickerVisible = false,
+                audioRouteNotice = null,
+                notice = notice,
+                errorMessage = null,
+                busy = false,
+                selectedAudioRoute = AudioRoute.SPEAKER,
+                availableAudioRoutes = emptyList(),
+                audioRouteSupported = false,
+            )
+        }
+    }
+
+    private fun buildInitialState(): MainUiState {
+        val saved = preferences.load()
+        return MainUiState(
+            serverBaseUrl = saved.advancedServerUrl.ifBlank { defaultServerBaseUrl() },
+            nickname = saved.nickname.ifBlank { "Operador Android" },
+            roomName = saved.roomName.ifBlank { "Equipe LAN" },
+            channelsInput = saved.channelsInput.ifBlank { "Geral, Operacao, Suporte" },
+            roomCodeInput = saved.lastJoinedRoomCode.uppercase(),
+            setupMode = SetupMode.SIMPLE,
+            discoveryActive = true,
+            notice = "Crie uma sala ou entre por descoberta local.",
+        )
+    }
+
     private fun parseChannelNames(input: String): List<String> {
         return input.split(",")
             .map(String::trim)
@@ -465,10 +760,21 @@ class MainViewModel(
             .take(8)
     }
 
+    private fun buildPairingUrl(roomCode: String, hostEndpoint: HostEndpoint?): String? {
+        val endpoint = hostEndpoint ?: return null
+        return endpoint.consoleUrl?.let { consoleUrl ->
+            if (consoleUrl.contains("roomCode=")) {
+                consoleUrl
+            } else {
+                "$consoleUrl?roomCode=$roomCode"
+            }
+        } ?: "${endpoint.baseUrl}/console?roomCode=$roomCode"
+    }
+
     private fun requireValidServerBaseUrl(input: String): String {
         val normalized = input.trim().trimEnd('/')
         require(normalized.isNotEmpty()) {
-            "Preencha o endereco do servidor. No celular, use o IP do seu computador, por exemplo: http://192.168.0.15:8787"
+            "Preencha o endereco do servidor. No celular, use o IP do computador, por exemplo: http://192.168.0.15:8787"
         }
         require(normalized.startsWith("http://") || normalized.startsWith("https://")) {
             "O endereco do servidor precisa comecar com http:// ou https://"
@@ -497,6 +803,11 @@ class MainViewModel(
         _uiState.update { it.copy(busy = value) }
     }
 
+    private fun handleSocketFailure(throwable: Throwable) {
+        audioRoutes.stopSession()
+        handleFailure(throwable)
+    }
+
     private fun handleFailure(throwable: Throwable) {
         _uiState.update {
             it.copy(
@@ -510,7 +821,10 @@ class MainViewModel(
 
     override fun onCleared() {
         super.onCleared()
+        localDiscovery.stop()
+        localRuntime.stop()
         socket.disconnect()
+        audioRoutes.release()
         rtc.release()
         WalkieSessionService.stop(getApplication())
     }

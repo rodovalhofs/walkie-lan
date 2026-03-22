@@ -3,6 +3,12 @@ import { z } from "zod";
 export const clientTypes = ["android_native", "ios_web", "android_web_debug"] as const;
 export type ClientType = (typeof clientTypes)[number];
 
+export const transportModes = ["local_lan", "remote_signaling"] as const;
+export type TransportMode = (typeof transportModes)[number];
+
+export const clientRoles = ["full_voice", "console_only", "experimental_web_voice"] as const;
+export type ClientRole = (typeof clientRoles)[number];
+
 export const eventTypes = [
   "join",
   "leave",
@@ -19,6 +25,45 @@ export type EventType = (typeof eventTypes)[number];
 export const hostStatusSchema = z.enum(["online", "offline", "closed"]);
 export type HostStatus = z.infer<typeof hostStatusSchema>;
 
+export const transportModeSchema = z.enum(transportModes);
+export const clientRoleSchema = z.enum(clientRoles);
+
+export const peerCapabilitiesSchema = z.object({
+  canTransmitAudio: z.boolean(),
+  canReceiveAudio: z.boolean(),
+  supportsLocalJoin: z.boolean(),
+  supportsAdvancedWebRtc: z.boolean(),
+});
+export type PeerCapabilities = z.infer<typeof peerCapabilitiesSchema>;
+
+export const roomCapabilitiesSchema = z.object({
+  allowsConsoleClients: z.boolean(),
+  allowsExperimentalWebVoice: z.boolean(),
+  localFirst: z.boolean(),
+});
+export type RoomCapabilities = z.infer<typeof roomCapabilitiesSchema>;
+
+export const hostEndpointSchema = z.object({
+  hostAddress: z.string(),
+  port: z.number().int().positive(),
+  baseUrl: z.string().url(),
+  consoleUrl: z.string().url().nullable().optional(),
+});
+export type HostEndpoint = z.infer<typeof hostEndpointSchema>;
+
+export const localPairingPayloadSchema = z.object({
+  roomId: z.string(),
+  roomCode: z.string().min(4).max(8),
+  roomName: z.string(),
+  hostAddress: z.string(),
+  port: z.number().int().positive(),
+  protocolVersion: z.string(),
+  transportMode: z.literal("local_lan"),
+  roomCapabilities: roomCapabilitiesSchema,
+  consoleUrl: z.string().url(),
+});
+export type LocalPairingPayload = z.infer<typeof localPairingPayloadSchema>;
+
 export const createRoomRequestSchema = z.object({
   roomName: z.string().min(3).max(48),
   channelNames: z.array(z.string().min(1).max(24)).min(1).max(8),
@@ -34,6 +79,10 @@ export const roomCodeReservationSchema = z.object({
   hostSessionToken: z.string(),
   hostPeerId: z.string(),
   wsUrl: z.string().url(),
+  transportMode: transportModeSchema.default("remote_signaling"),
+  hostEndpoint: hostEndpointSchema.nullable().optional(),
+  roomCapabilities: roomCapabilitiesSchema.optional(),
+  pairingUrl: z.string().url().nullable().optional(),
 });
 export type RoomCodeReservation = z.infer<typeof roomCodeReservationSchema>;
 
@@ -42,6 +91,7 @@ export const joinRoomRequestSchema = z.object({
   nickname: z.string().min(2).max(24),
   clientType: z.enum(clientTypes),
   deviceId: z.string().min(3).max(96),
+  requestedRole: clientRoleSchema.optional(),
 });
 export type JoinRoomRequest = z.infer<typeof joinRoomRequestSchema>;
 
@@ -52,6 +102,8 @@ export const peerStateSchema = z.object({
   deviceId: z.string(),
   selectedChannelId: z.string(),
   isHost: z.boolean(),
+  role: clientRoleSchema.default("full_voice"),
+  capabilities: peerCapabilitiesSchema,
   isConnected: z.boolean(),
   joinedAt: z.string(),
   lastSeenAt: z.string(),
@@ -85,6 +137,9 @@ export const roomSnapshotSchema = z.object({
   members: z.array(peerStateSchema),
   activeSpeakerByChannel: z.record(z.string(), z.string().nullable()),
   hostStatus: hostStatusSchema,
+  transportMode: transportModeSchema.default("remote_signaling"),
+  hostEndpoint: hostEndpointSchema.nullable().optional(),
+  roomCapabilities: roomCapabilitiesSchema,
   eventLog: z.array(eventEntrySchema),
   capacity: z.number().int().positive(),
 });
@@ -113,6 +168,9 @@ export const joinRoomResponseSchema = z.object({
   peerId: z.string(),
   peerToken: z.string(),
   wsUrl: z.string().url(),
+  clientRole: clientRoleSchema.default("full_voice"),
+  transportMode: transportModeSchema.default("remote_signaling"),
+  hostEndpoint: hostEndpointSchema.nullable().optional(),
   snapshot: roomSnapshotSchema,
 });
 export type JoinRoomResponse = z.infer<typeof joinRoomResponseSchema>;
@@ -228,3 +286,4 @@ export type SocketMessage = z.infer<typeof socketMessageSchema>;
 export const DEFAULT_CHANNELS = ["Geral", "Operacao", "Suporte"] as const;
 export const ROOM_CAPACITY = 10;
 export const EVENT_LOG_LIMIT = 200;
+export const PROTOCOL_VERSION = "2.0.0";

@@ -2,165 +2,126 @@
 
 ## Papel do app Android
 
-O app Android e o centro da experiencia principal do projeto.
+O APK Android e o centro da experiencia principal do Walkie LAN.
 
-Ele:
+Ele agora faz muito mais do que a versao inicial:
 
-- cria sala
-- entra em sala
-- mantem estado local da UI
-- controla o PTT quando e o host
-- negocia WebRTC
-- mostra presenca e eventos
-- mantem um foreground service de sessao
+- cria sala local
+- sobe endpoint HTTP/WebSocket local
+- anuncia a sala na LAN
+- descobre salas locais
+- entra em salas pela descoberta
+- exibe QR para console auxiliar
+- opera PTT
+- troca saida de audio
 
 ## Arquivos principais
 
-### `MainActivity.kt`
-
-Ponto de entrada do app. Cria a tela Compose principal.
-
 ### `MainViewModel.kt`
 
-E o cerebro do app. Ele:
+E o centro da orquestracao do app. Hoje ele:
 
-- chama a API REST
-- conecta no WebSocket
-- interpreta mensagens de socket
-- gerencia estado de UI
-- faz a automacao de host para `talk_request` e `talk_release_request`
-- decide quando habilitar ou desabilitar o microfone
-- atualiza o roteamento de audio para peers elegiveis
-
-### `UiState.kt`
-
-Define o estado observado pela UI:
-
-- URL do servidor
-- apelido
-- nome da sala
-- canais
-- codigo
-- snapshot
-- sessao ativa
-- conectado
-- microfone pronto
-- falando ou escutando
-- mensagem de aviso
-- erro
-- busy
+- carrega preferencias locais
+- inicia descoberta LAN
+- cria sala local com `LocalHostRuntime`
+- entra em sala por descoberta
+- mantem o fluxo legado do modo avancado
+- gerencia sessao, snapshot e mensagens de socket
+- automatiza o host para `talk_request` e `talk_release_request`
 
 ### `WalkieScreen.kt`
 
-Define a interface Compose. Tem dois estados:
+Define a interface Compose em dois blocos:
 
-- `SetupScreen`
-- `ActiveRoomScreen`
+- tela de setup com `Modo simples` e `Modo avancado`
+- tela ativa de operacao
 
-No `SetupScreen`, o usuario:
+Na tela ativa o usuario ve:
 
-- informa endereco do servidor
-- informa apelido
-- define nome da sala
-- define canais
-- cria sala
-- entra por codigo
+- nome da sala
+- codigo grande
+- status do host
+- participantes
+- QR do console
+- canais
+- PTT central
+- saida de audio
+- eventos
 
-No `ActiveRoomScreen`, o usuario:
+### `UiState.kt`
 
-- ve codigo da sala
-- ve status do host
-- ve status do microfone
-- troca de canal
-- habilita microfone
-- segura para falar
-- encerra a sessao
-- acompanha presenca e eventos
+Hoje o estado da UI inclui:
 
-### `SignalingApi.kt`
+- modo de setup
+- apelido
+- sala
+- canais
+- codigo da sala
+- salas descobertas na LAN
+- endpoint local
+- URL do console auxiliar
+- sessao ativa
+- snapshot
+- estado de audio e microfone
 
-Cliente REST Android.
+### `local/`
 
-Tem dois metodos principais:
+Esse pacote cuida do fluxo local:
 
-- `createRoom`
-- `joinRoom`
+- `LocalPreferenceStore.kt`
+- `LanAddressResolver.kt`
+- `NsdRoomAdvertiser.kt`
+- `NsdRoomDiscovery.kt`
 
-Usa OkHttp e `kotlinx.serialization`.
+### `localserver/`
 
-### `SignalingSocket.kt`
+Esse pacote implementa o host local Android:
 
-Cliente WebSocket Android.
+- `LocalHostRuntime.kt`
+- `LocalHostServer.kt`
+- `LocalRoomRegistry.kt`
 
-Ao abrir a conexao:
+O host local expoe:
 
-- conecta em `session.wsUrl`
-- envia `hello`
-- decodifica mensagens do servidor em `SocketMessage`
+- `GET /health`
+- `POST /api/rooms`
+- `POST /api/rooms/join`
+- `GET /api/rooms/{roomCode}`
+- `GET /api/pairing`
+- `GET /console`
+- `ws://.../ws`
 
-### `ProtocolModels.kt`
+### `audio/AudioRouteController.kt`
 
-Replica no Android os contratos usados no servidor e na web.
+Controla rotas de audio da sessao:
 
-Pontos importantes:
+- `Alto-falante`
+- `Auricular`
+- `Fone com fio`
+- `Bluetooth`
 
-- `explicitNulls = false` na serializacao
-- `ignoreUnknownKeys = true`
-- discriminador `kind` para mensagens de socket
+## Permissoes importantes
 
-### `WebRtcController.kt`
+No `AndroidManifest.xml`, alem das permissoes basicas, a V2 usa:
 
-Camada WebRTC Android.
+- `ACCESS_WIFI_STATE`
+- `CHANGE_WIFI_MULTICAST_STATE`
 
-Responsabilidades:
+Essas permissoes ajudam no fluxo local e na descoberta da sala.
 
-- inicializar `PeerConnectionFactory`
-- criar `AudioTrack`
-- criar `PeerConnection` por peer remoto
-- enviar `offer`
-- responder `offer` com `answer`
-- aplicar `answer`
-- codificar e decodificar ICE candidates
-- anexar ou remover audio dos peers elegiveis
+## Defaults operacionais
 
-### `WalkieSessionService.kt`
-
-Foreground service da sessao.
-
-Responsabilidades:
-
-- criar canal de notificacao
-- manter notificacao persistente
-- atualizar titulo da notificacao com a sala ativa
-
-## Permissoes Android
-
-Declaradas no `AndroidManifest.xml`:
-
-- `INTERNET`
-- `RECORD_AUDIO`
-- `FOREGROUND_SERVICE`
-- `FOREGROUND_SERVICE_DATA_SYNC`
-- `FOREGROUND_SERVICE_MICROPHONE`
-- `POST_NOTIFICATIONS`
-- `ACCESS_NETWORK_STATE`
-- `WAKE_LOCK`
-
-## Defaults importantes
-
-- no emulador, a URL padrao e `http://10.0.2.2:8787`
-- fora do emulador, o campo do servidor comeca vazio
 - apelido padrao: `Operador Android`
 - sala padrao: `Equipe LAN`
 - canais padrao: `Geral, Operacao, Suporte`
+- rota de audio padrao ao entrar: `Alto-falante`
 
-## Comportamento de host
+## O que e oficial no Android
 
-Quando o Android esta como host:
+O caminho oficial do produto hoje e:
 
-- recebe `talk_request`
-- verifica se o canal esta livre
-- envia `talk_granted` ou `talk_denied`
-- quando recebe `talk_release_request`, envia `talk_released`
+- criar e hospedar localmente no Android
+- entrar por descoberta local no Android
+- usar o navegador como console auxiliar
 
-Esse fluxo esta concentrado em `maybeHandleHostAutomation` no `MainViewModel.kt`.
+O modo avancado continua existindo, mas nao e mais o centro da experiencia.

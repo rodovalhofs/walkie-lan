@@ -1,7 +1,7 @@
 import type {
+  ClientRole,
   CreateRoomRequest,
   JoinRoomResponse,
-  PeerState,
   RoomCodeReservation,
   RoomSnapshot,
   SocketMessage,
@@ -19,10 +19,12 @@ type ActiveSession = {
   peerId: string;
   token: string;
   wsUrl: string;
+  clientRole: ClientRole;
   isHostDebug: boolean;
 };
 
 const DEFAULT_SERVER_URL = getDefaultServerUrl();
+const DEFAULT_AUDIO_OUTPUT_LABEL = "Padrao do sistema";
 
 function getDefaultServerUrl() {
   if (typeof window === "undefined") {
@@ -63,9 +65,33 @@ function isInitiator(localPeerId: string, remotePeerId: string) {
   return localPeerId.localeCompare(remotePeerId) < 0;
 }
 
+function canSelectAudioOutputInBrowser() {
+  if (typeof window === "undefined" || !window.isSecureContext || typeof document === "undefined") {
+    return false;
+  }
+
+  const mediaDevices = navigator.mediaDevices;
+  const audio = document.createElement("audio");
+  return typeof mediaDevices?.selectAudioOutput === "function" && typeof audio.setSinkId === "function";
+}
+
+function defaultAudioOutputMessage(canSelectAudioOutput: boolean) {
+  return canSelectAudioOutput
+    ? `Saida atual: ${DEFAULT_AUDIO_OUTPUT_LABEL}.`
+    : "O navegador esta usando a saida padrao do aparelho.";
+}
+
+function getErrorMessage(error: unknown) {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  return "Falha inesperada.";
+}
+
 export default function App() {
   const [serverUrl, setServerUrl] = useState(DEFAULT_SERVER_URL);
   const [nickname, setNickname] = useState("Operador");
+  const [advancedOpen, setAdvancedOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [session, setSession] = useState<ActiveSession | null>(null);
@@ -73,8 +99,17 @@ export default function App() {
   const [connected, setConnected] = useState(false);
   const [micReady, setMicReady] = useState(false);
   const [isTalking, setIsTalking] = useState(false);
-  const [notice, setNotice] = useState("Segure para transmitir no canal ativo.");
+  const [notice, setNotice] = useState(
+    "Use o APK Android para criar a sala. O navegador entra como console auxiliar ou laboratorio experimental.",
+  );
   const [remoteStreams, setRemoteStreams] = useState<Map<string, MediaStream>>(new Map());
+  const [canSelectAudioOutput, setCanSelectAudioOutput] = useState(() => canSelectAudioOutputInBrowser());
+  const [selectedOutputDeviceId, setSelectedOutputDeviceId] = useState("");
+  const [selectedOutputLabel, setSelectedOutputLabel] = useState(DEFAULT_AUDIO_OUTPUT_LABEL);
+  const [audioOutputBusy, setAudioOutputBusy] = useState(false);
+  const [audioOutputMessage, setAudioOutputMessage] = useState(() =>
+    defaultAudioOutputMessage(canSelectAudioOutputInBrowser()),
+  );
 
   const signalingRef = useRef<SignalingClient | null>(null);
   const meshRef = useRef<MeshManager | null>(null);
@@ -91,6 +126,12 @@ export default function App() {
     };
   }, []);
 
+  useEffect(() => {
+    const supported = canSelectAudioOutputInBrowser();
+    setCanSelectAudioOutput(supported);
+    setAudioOutputMessage(defaultAudioOutputMessage(supported));
+  }, []);
+
   const roomCode = useMemo(() => session?.roomCode ?? "", [session]);
 
   async function onCreateRoom(payload: { roomName: string; channelNames: string[] }) {
@@ -105,6 +146,7 @@ export default function App() {
       };
       const reservation = await createRoom(serverUrl, request);
       await activateSessionFromReservation(reservation);
+      setNotice("Host web experimental conectado.");
     } catch (caught) {
       setError(getErrorMessage(caught));
     } finally {
@@ -112,17 +154,19 @@ export default function App() {
     }
   }
 
-  async function onJoinRoom(payload: { roomCode: string }) {
+  async function onJoinRoom(payload: { roomCode: string; clientType: "ios_web" | "android_web_debug" }) {
     setBusy(true);
     setError(null);
     try {
       const response = await joinRoom(serverUrl, {
         roomCode: payload.roomCode,
         nickname,
-        clientType: "ios_web",
+        clientType: payload.clientType,
         deviceId: getDeviceId(),
+        requestedRole: payload.clientType === "android_web_debug" ? "experimental_web_voice" : "console_only",
       });
       await activateSessionFromJoin(response, payload.roomCode.toUpperCase());
+      setAdvancedOpen(payload.clientType === "android_web_debug");
     } catch (caught) {
       setError(getErrorMessage(caught));
     } finally {
@@ -137,6 +181,7 @@ export default function App() {
       peerId: reservation.hostPeerId,
       token: reservation.hostSessionToken,
       wsUrl: reservation.wsUrl,
+      clientRole: "experimental_web_voice",
       isHostDebug: true,
     });
   }
@@ -149,7 +194,8 @@ export default function App() {
       peerId: response.peerId,
       token: response.peerToken,
       wsUrl: response.wsUrl,
-      isHostDebug: false,
+      clientRole: response.clientRole,
+      isHostDebug: response.clientRole === "experimental_web_voice",
     });
   }
 
@@ -160,6 +206,9 @@ export default function App() {
     setConnected(false);
     setMicReady(false);
     setIsTalking(false);
+    setSelectedOutputDeviceId("");
+    setSelectedOutputLabel(DEFAULT_AUDIO_OUTPUT_LABEL);
+    setAudioOutputMessage(defaultAudioOutputMessage(canSelectAudioOutputInBrowser()));
     setSession(nextSession);
 
     const signaling = new SignalingClient();
@@ -198,7 +247,7 @@ export default function App() {
       },
       onClose: () => {
         setConnected(false);
-        setNotice("Conexao encerrada.");
+        teardownSession("Conexao encerrada.");
       },
       onError: (caught) => {
         setError(getErrorMessage(caught));
@@ -208,7 +257,28 @@ export default function App() {
 
     signalingRef.current = signaling;
     meshRef.current = mesh;
-    setNotice("Sessao conectando. Habilite o microfone antes de transmitir.");
+    setNotice(
+      nextSession.clientRole === "console_only"
+        ? "Console auxiliar conectado. Este navegador acompanha a sala, sem PTT oficial."
+        : "Sessao conectando. Habilite o microfone apenas se estiver no laboratorio experimental.",
+    );
+  }
+
+  function teardownSession(message: string) {
+    signalingRef.current?.disconnect();
+    signalingRef.current = null;
+    meshRef.current?.destroyAll();
+    meshRef.current = null;
+    setSession(null);
+    setSnapshot(null);
+    setConnected(false);
+    setMicReady(false);
+    setIsTalking(false);
+    setRemoteStreams(new Map());
+    setSelectedOutputDeviceId("");
+    setSelectedOutputLabel(DEFAULT_AUDIO_OUTPUT_LABEL);
+    setAudioOutputMessage(defaultAudioOutputMessage(canSelectAudioOutputInBrowser()));
+    setNotice(message);
   }
 
   function ensureMeshPeers(localSession: ActiveSession, roomSnapshot: RoomSnapshot) {
@@ -224,7 +294,7 @@ export default function App() {
     }
   }
 
-  function patchMembers(mutator: (members: PeerState[]) => PeerState[]) {
+  function patchMembers(mutator: (members: RoomSnapshot["members"]) => RoomSnapshot["members"]) {
     setSnapshot((current) => {
       if (!current) {
         return current;
@@ -244,7 +314,7 @@ export default function App() {
     message: SocketMessage,
   ) {
     if (localSession.isHostDebug) {
-      maybeHandleHostDebugAutomation(localSession, signaling, message);
+      maybeHandleHostDebugAutomation(signaling, message);
     }
 
     switch (message.kind) {
@@ -297,7 +367,7 @@ export default function App() {
           setIsTalking(true);
           mesh.setMicrophoneEnabled(true);
           void refreshOutboundRouting(localSession.peerId);
-          setNotice("Transmitindo para os pares do mesmo canal.");
+          setNotice("Transmitindo para os participantes do mesmo canal.");
         }
         break;
       case "talk_denied":
@@ -340,8 +410,7 @@ export default function App() {
         }));
         break;
       case "room_closed":
-        setNotice(message.reason);
-        setConnected(false);
+        teardownSession(message.reason);
         break;
       case "error":
         setNotice(message.message);
@@ -350,17 +419,15 @@ export default function App() {
         break;
       case "sync_snapshot":
         setSnapshot(message.snapshot);
+        ensureMeshPeers(localSession, message.snapshot);
         break;
     }
   }
 
-  function maybeHandleHostDebugAutomation(
-    localSession: ActiveSession,
-    signaling: SignalingClient,
-    message: SocketMessage,
-  ) {
+  function maybeHandleHostDebugAutomation(signaling: SignalingClient, message: SocketMessage) {
     const current = snapshotRef.current;
-    if (!current) {
+    const currentSession = session;
+    if (!current || !currentSession) {
       return;
     }
 
@@ -395,20 +462,54 @@ export default function App() {
         peerId: message.peerId,
         queueVersion: version,
       });
-      if (message.peerId === localSession.peerId) {
+      if (message.peerId === currentSession.peerId) {
         setIsTalking(false);
       }
     }
   }
 
   async function onEnableMic() {
+    if (session?.clientRole === "console_only") {
+      setNotice("Este navegador entrou apenas como console auxiliar.");
+      return;
+    }
     try {
       await meshRef.current?.ensureMicrophone();
       setMicReady(true);
-      setNotice("Microfone pronto para PTT.");
+      setNotice("Microfone pronto para o laboratorio web.");
     } catch (caught) {
       setError(getErrorMessage(caught));
     }
+  }
+
+  async function onSelectAudioOutput() {
+    if (!canSelectAudioOutput || typeof navigator === "undefined" || typeof navigator.mediaDevices?.selectAudioOutput !== "function") {
+      setAudioOutputMessage("O navegador esta usando a saida padrao do aparelho.");
+      return;
+    }
+
+    setAudioOutputBusy(true);
+    try {
+      const device = await navigator.mediaDevices.selectAudioOutput();
+      const label = device.label || "Dispositivo selecionado";
+      setSelectedOutputDeviceId(device.deviceId);
+      setSelectedOutputLabel(label);
+      setAudioOutputMessage(`Saida atual: ${label}.`);
+    } catch (caught) {
+      if (caught instanceof DOMException && caught.name === "AbortError") {
+        setAudioOutputMessage(`Saida atual: ${selectedOutputLabel}.`);
+      } else {
+        setAudioOutputMessage("Nao foi possivel trocar a saida de audio. O navegador segue na saida padrao.");
+      }
+    } finally {
+      setAudioOutputBusy(false);
+    }
+  }
+
+  function onAudioOutputSinkError() {
+    setSelectedOutputDeviceId("");
+    setSelectedOutputLabel(DEFAULT_AUDIO_OUTPUT_LABEL);
+    setAudioOutputMessage("A saida escolhida nao esta disponivel. O navegador voltou para a saida padrao.");
   }
 
   async function refreshOutboundRouting(localPeerId: string) {
@@ -418,7 +519,7 @@ export default function App() {
       return;
     }
     const self = roomSnapshot.members.find((member) => member.peerId === localPeerId);
-    if (!self) {
+    if (!self || self.capabilities.canTransmitAudio === false) {
       return;
     }
     const eligiblePeerIds = roomSnapshot.members
@@ -450,8 +551,13 @@ export default function App() {
       setNotice("Habilite o microfone antes de falar.");
       return;
     }
+    if (currentSession.clientRole === "console_only") {
+      setNotice("Este navegador entrou apenas como console auxiliar.");
+      return;
+    }
     const self = currentSnapshot.members.find((member) => member.peerId === currentSession.peerId);
-    if (!self) {
+    if (!self || self.capabilities.canTransmitAudio === false) {
+      setNotice("Esta sessao web nao pode transmitir audio.");
       return;
     }
     signalingRef.current?.send({
@@ -484,14 +590,17 @@ export default function App() {
     return (
       <main className="page-shell">
         <LandingPanel
-          serverUrl={serverUrl}
-          setServerUrl={(value) => setServerUrl(normalizeBaseUrl(value))}
           nickname={nickname}
           setNickname={setNickname}
+          advancedOpen={advancedOpen}
+          onToggleAdvanced={() => setAdvancedOpen((current) => !current)}
+          serverUrl={serverUrl}
+          setServerUrl={(value) => setServerUrl(normalizeBaseUrl(value))}
           onCreateRoom={onCreateRoom}
           onJoinRoom={onJoinRoom}
           busy={busy}
           error={error}
+          statusMessage={notice}
         />
       </main>
     );
@@ -503,6 +612,7 @@ export default function App() {
         snapshot={snapshot}
         selfPeerId={session.peerId}
         roomCode={roomCode}
+        clientRole={session.clientRole}
         connected={connected}
         micReady={micReady}
         isTalking={isTalking}
@@ -510,16 +620,16 @@ export default function App() {
         onSelectChannel={onSelectChannel}
         onPressToTalkStart={onPressToTalkStart}
         onPressToTalkEnd={onPressToTalkEnd}
+        onSelectAudioOutput={onSelectAudioOutput}
+        onAudioOutputSinkError={onAudioOutputSinkError}
         remoteStreams={remoteStreams}
         notice={notice}
+        canSelectAudioOutput={canSelectAudioOutput}
+        audioOutputBusy={audioOutputBusy}
+        audioOutputLabel={selectedOutputLabel}
+        audioOutputMessage={audioOutputMessage}
+        selectedOutputDeviceId={selectedOutputDeviceId}
       />
     </main>
   );
-}
-
-function getErrorMessage(error: unknown) {
-  if (error instanceof Error) {
-    return error.message;
-  }
-  return "Falha inesperada.";
 }

@@ -2,82 +2,90 @@
 
 ## Proposito
 
-O Walkie LAN existe para entregar uma comunicacao de voz simples em rede local, com cara de walkie-talkie:
+O Walkie LAN existe para entregar comunicacao de voz simples em rede local com cara de walkie-talkie:
 
-- codigo curto para entrar na sala
-- canais fixos
-- push-to-talk
-- pouca friccao para teste
+- criar rapido
+- entrar sem conta
+- usar canais fixos
+- operar com PTT
+- funcionar bem em pequenos grupos
 
 ## Modelo atual
 
-O modelo implementado hoje e hibrido:
+Na V2, o modelo principal passou a ser `local-first`:
 
-- Android nativo e o host principal
-- o servidor faz bootstrap e sinalizacao
-- a web app entra como cliente e troca audio por WebRTC
+- Android nativo e o host oficial da sala
+- a sala pode ser exposta localmente pelo proprio Android
+- descoberta local no Android acontece por NSD/mDNS
+- navegadores entram como console auxiliar ou laboratorio experimental
 
-Isso significa que o Android hospeda a sessao e as decisoes de PTT, mas nao elimina totalmente o backend.
+O fluxo antigo com backend externo ainda existe, mas ficou no `Modo avancado`.
 
-## Porque existe um servidor
+## Fluxos suportados
 
-O servidor atual resolve problemas importantes:
+### Fluxo principal
 
-- cria a sala e gera o codigo curto
-- autoriza a entrada por codigo
-- entrega o `wsUrl` correto para cada cliente
-- autentica a conexao WebSocket inicial
-- retransmite mensagens de sinalizacao e eventos de sessao
+1. Android cria a sala
+2. Android sobe o endpoint local
+3. Android anuncia a sala na LAN
+4. Outro Android descobre e entra
+5. iPhone ou desktop abrem o console local por QR/link
+
+### Fluxo avancado
+
+1. Servidor Node cria a sala
+2. Android ou web entram por URL manual
+3. laboratorio web pode atuar como host experimental
 
 ## Tipos de cliente
 
-O protocolo reconhece hoje tres tipos:
+O protocolo reconhece hoje:
 
 - `android_native`
 - `ios_web`
 - `android_web_debug`
 
+## Papeis de cliente
+
+O protocolo tambem diferencia o papel de cada cliente:
+
+- `full_voice`
+- `console_only`
+- `experimental_web_voice`
+
+Isso permite que a UI e a logica decidam claramente quem pode:
+
+- transmitir audio
+- receber audio
+- entrar por fluxo local
+- usar WebRTC avancado
+
 ## O que ja esta implementado
 
-- criacao de sala via API
-- entrada em sala via codigo curto
-- snapshot de sala
-- eventos de presenca
-- eventos de troca de canal
-- eventos de inicio e fim de fala
-- fluxo de `talk_request`, `talk_granted`, `talk_denied` e `talk_released`
-- WebRTC com `offer`, `answer` e `ice-candidate`
-- app Android com Compose
-- web app em React
-- PWA basica para a web
+- host local no Android
+- descoberta LAN no Android
+- QR code para console auxiliar
+- home do APK em modo simples e avancado
+- tela operacional de PTT
+- seletor de saida de audio no Android
+- landing publica nova no site
+- laboratorio web isolado do fluxo principal
+- protocolo com `transportMode`, `hostEndpoint` e capacidades
 
-## O que ainda nao existe
+## O que ainda nao e foco principal
 
+- deploy publico definitivo
+- experiencia web como caminho oficial de voz
+- criptografia ponta a ponta
 - contas de usuario
-- lista de salas publica
-- descoberta LAN no cliente web
 - gravacao de audio
-- chat de texto
-- moderacao com papeis
-- deploy automatizado de producao
 
 ## Filosofia tecnica
 
 O projeto privilegia:
 
 - simplicidade
-- facilidade de teste local
-- codigo compartilhado no protocolo
-- compatibilidade entre Android e navegador
-
-## Capacidade atual
-
-O limite de sala definido hoje no protocolo e `10` participantes.
-
-O limite de eventos retidos no snapshot e `200`.
-
-Os canais padrao sao:
-
-- `Geral`
-- `Operacao`
-- `Suporte`
+- uso real em LAN
+- Android como experiencia principal
+- web honesta sobre suas limitacoes
+- compatibilidade via protocolo compartilhado

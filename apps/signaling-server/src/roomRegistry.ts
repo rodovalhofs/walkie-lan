@@ -3,16 +3,21 @@ import {
   DEFAULT_CHANNELS,
   EVENT_LOG_LIMIT,
   ROOM_CAPACITY,
+  type ClientRole,
   type CreateRoomRequest,
   type EventEntry,
+  type HostEndpoint,
   type JoinRoomRequest,
   type JoinRoomResponse,
   type PeerState,
+  type PeerCapabilities,
   type RoomCodeReservation,
+  type RoomCapabilities,
   type RoomSnapshot,
   type SignalEnvelope,
   type SocketMessage,
   type TalkLockState,
+  type TransportMode,
 } from "@walkie/protocol";
 import { randomBytes, randomUUID } from "node:crypto";
 
@@ -35,6 +40,9 @@ interface RoomRecord {
   expiresAt: string;
   hostSessionToken: string;
   hostPeerId: string;
+  transportMode: TransportMode;
+  hostEndpoint: HostEndpoint | null;
+  roomCapabilities: RoomCapabilities;
   channels: ChannelState[];
   activeSpeakerByChannel: Record<string, string | null>;
   talkLocks: Record<string, TalkLockState>;
@@ -52,12 +60,24 @@ export class RoomRegistry {
   private readonly roomsById = new Map<string, RoomRecord>();
   private readonly roomIdByCode = new Map<string, string>();
 
-  createRoom(input: CreateRoomRequest, wsUrl: string): RoomCodeReservation {
+  createRoom(
+    input: CreateRoomRequest,
+    wsUrl: string,
+    options: {
+      baseUrl?: string;
+      transportMode?: TransportMode;
+      hostEndpoint?: HostEndpoint | null;
+      pairingUrl?: string | null;
+    } = {},
+  ): RoomCodeReservation {
     const roomId = randomUUID();
     const hostPeerId = randomUUID();
     const hostSessionToken = this.makeToken();
     const roomCode = this.makeRoomCode();
     const expiresAt = new Date(Date.now() + 12 * 60 * 60 * 1000).toISOString();
+    const transportMode = options.transportMode ?? "remote_signaling";
+    const hostEndpoint = options.hostEndpoint ?? this.hostEndpointFromBaseUrl(options.baseUrl);
+    const roomCapabilities = this.roomCapabilitiesForTransport(transportMode);
     const channelNames = input.channelNames.length > 0 ? input.channelNames : [...DEFAULT_CHANNELS];
     const channels = channelNames.map<ChannelState>((name, index) => ({
       channelId: `channel-${index + 1}`,
@@ -85,6 +105,8 @@ export class RoomRegistry {
       deviceId: input.hostDeviceId,
       selectedChannelId: channels[0]?.channelId ?? "channel-1",
       isHost: true,
+      role: "full_voice",
+      capabilities: this.capabilitiesForRole("full_voice", transportMode),
       isConnected: false,
       joinedAt: now,
       lastSeenAt: now,
@@ -97,6 +119,9 @@ export class RoomRegistry {
       expiresAt,
       hostSessionToken,
       hostPeerId,
+      transportMode,
+      hostEndpoint,
+      roomCapabilities,
       channels,
       activeSpeakerByChannel,
       talkLocks,
@@ -119,10 +144,22 @@ export class RoomRegistry {
       hostSessionToken,
       hostPeerId,
       wsUrl,
+      transportMode,
+      hostEndpoint,
+      roomCapabilities,
+      pairingUrl: options.pairingUrl ?? hostEndpoint?.consoleUrl ?? null,
     };
   }
 
-  joinRoom(input: JoinRoomRequest, wsUrl: string): JoinRoomResponse {
+  joinRoom(
+    input: JoinRoomRequest,
+    wsUrl: string,
+    options: {
+      baseUrl?: string;
+      hostEndpoint?: HostEndpoint | null;
+      requestedRole?: ClientRole;
+    } = {},
+  ): JoinRoomResponse {
     const room = this.getRoomByCodeOrThrow(input.roomCode);
     this.ensureRoomOpen(room);
     if (room.hostStatus !== "online") {
@@ -133,6 +170,7 @@ export class RoomRegistry {
     }
     const peerId = randomUUID();
     const peerToken = this.makeToken();
+    const role = options.requestedRole ?? input.requestedRole ?? this.defaultRoleForClientType(input.clientType);
     const now = new Date().toISOString();
     const peer: InternalPeer = {
       peerId,
@@ -141,6 +179,8 @@ export class RoomRegistry {
       deviceId: input.deviceId,
       selectedChannelId: room.channels[0]?.channelId ?? "channel-1",
       isHost: false,
+      role,
+      capabilities: this.capabilitiesForRole(role, room.transportMode),
       isConnected: false,
       joinedAt: now,
       lastSeenAt: now,
@@ -152,6 +192,9 @@ export class RoomRegistry {
       peerId,
       peerToken,
       wsUrl,
+      clientRole: role,
+      transportMode: room.transportMode,
+      hostEndpoint: options.hostEndpoint ?? room.hostEndpoint ?? this.hostEndpointFromBaseUrl(options.baseUrl),
       snapshot: this.toSnapshot(room),
     };
   }
@@ -380,6 +423,9 @@ export class RoomRegistry {
       members: [...room.peers.values()].map((peer) => this.publicPeer(peer)),
       activeSpeakerByChannel: room.activeSpeakerByChannel,
       hostStatus: room.hostStatus,
+      transportMode: room.transportMode,
+      hostEndpoint: room.hostEndpoint,
+      roomCapabilities: room.roomCapabilities,
       eventLog: room.eventLog,
       capacity: ROOM_CAPACITY,
     };
@@ -498,5 +544,49 @@ export class RoomRegistry {
 
   private makeToken() {
     return randomBytes(24).toString("base64url");
+  }
+
+  private defaultRoleForClientType(clientType: JoinRoomRequest["clientType"]): ClientRole {
+    if (clientType === "ios_web") {
+      return "console_only";
+    }
+    if (clientType === "android_web_debug") {
+      return "experimental_web_voice";
+    }
+    return "full_voice";
+  }
+
+  private capabilitiesForRole(role: ClientRole, transportMode: TransportMode): PeerCapabilities {
+    return {
+      canTransmitAudio: role !== "console_only",
+      canReceiveAudio: true,
+      supportsLocalJoin: transportMode === "local_lan",
+      supportsAdvancedWebRtc: role !== "console_only",
+    };
+  }
+
+  private roomCapabilitiesForTransport(transportMode: TransportMode): RoomCapabilities {
+    return {
+      allowsConsoleClients: true,
+      allowsExperimentalWebVoice: true,
+      localFirst: transportMode === "local_lan",
+    };
+  }
+
+  private hostEndpointFromBaseUrl(baseUrl?: string): HostEndpoint | null {
+    if (!baseUrl) {
+      return null;
+    }
+    try {
+      const parsed = new URL(baseUrl);
+      return {
+        hostAddress: parsed.hostname,
+        port: Number(parsed.port || (parsed.protocol === "https:" ? 443 : 80)),
+        baseUrl: parsed.toString().replace(/\/$/, ""),
+        consoleUrl: null,
+      };
+    } catch {
+      return null;
+    }
   }
 }

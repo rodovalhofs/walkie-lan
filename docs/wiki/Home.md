@@ -2,58 +2,60 @@
 
 Bem-vindo a wiki do Walkie LAN.
 
-Este projeto e um walkie-talkie hibrido para rede local. O Android e o host principal da sala. Outros participantes podem entrar por outro Android ou pela web app, inclusive no iPhone pelo navegador.
+Esta documentacao acompanha a V2 do projeto, em que o produto passou a ser `local-first`:
 
-## O que voce encontra aqui
+- o APK Android e o host principal e caminho oficial
+- a rede local virou o fluxo prioritario
+- o site virou vitrine publica, onboarding e console auxiliar
+- o fluxo antigo com servidor manual ficou em modo avancado
+
+## Comece por aqui
 
 - [Visao geral](Visao-Geral.md)
 - [Arquitetura](Arquitetura.md)
-- [Estrutura do repositorio](Estrutura-do-Repositorio.md)
 - [Como rodar](Como-Rodar.md)
 - [Android host](Android-Host.md)
 - [Frontend web](Frontend-Web.md)
+- [Funcionalidades atuais do site](Funcionalidades-Atuais-do-Site.md)
+
+## O que mudou na V2
+
+- Android agora pode hospedar a sala localmente
+- Android anuncia a sala por NSD/mDNS
+- outro Android entra por descoberta local
+- o host gera QR code para abrir o console no navegador
+- a web publica nao fica mais centrada em "host no navegador"
+- o laboratorio web continua existindo, mas fora do fluxo principal
+
+## Papeis principais do sistema
+
+### APK Android
+
+- criar sala
+- descobrir salas LAN
+- entrar na sala
+- controlar PTT
+- exibir QR/local console
+- trocar saida de audio
+
+### Site / PWA
+
+- explicar o produto
+- orientar instalacao e uso
+- abrir fluxo avancado de compatibilidade
+- acompanhar a sala como console auxiliar
+
+### Servidor Node
+
+- manter compatibilidade com o modo avancado
+- criar sala e sinalizar no fluxo legado
+- servir laboratorio remoto/manual quando necessario
+
+## Outras paginas importantes
+
 - [Servidor de sinalizacao](Servidor-de-Sinalizacao.md)
 - [Protocolo compartilhado](Protocolo-Compartilhado.md)
 - [Fluxo de sessao e PTT](Fluxo-de-Sessao-e-PTT.md)
-- [Funcionalidades atuais do site](Funcionalidades-Atuais-do-Site.md)
-- [Troubleshooting](Troubleshooting.md)
 - [Mapa do codigo](Mapa-do-Codigo.md)
+- [Troubleshooting](Troubleshooting.md)
 - [Roadmap](Roadmap.md)
-
-## Resumo rapido
-
-- O repositorio e um monorepo com Android, web, servidor e pacote de protocolo.
-- O servidor cria salas, gera codigo curto e faz a sinalizacao via WebSocket.
-- O Android e o host autoritativo do PTT na experiencia principal.
-- A web permite entrada por codigo curto e audio via WebRTC.
-- O audio e distribuido de forma seletiva por canal, com um locutor por canal de cada vez.
-
-## Fluxo atual em uma frase
-
-Um Android cria a sala, recebe um codigo curto, os outros participantes entram pelo navegador ou por outro app, e o host controla quem pode falar em cada canal.
-
-## Estado atual do projeto
-
-Hoje o projeto ja consegue:
-
-- criar sala
-- entrar por codigo curto
-- manter presenca
-- trocar de canal
-- fazer PTT
-- enviar sinalizacao WebRTC entre Android e web
-- tocar audio remoto no navegador
-- manter uma notificacao de sessao no Android
-
-## Limites atuais
-
-- ainda depende de um servidor de apoio para bootstrap e sinalizacao
-- a experiencia web no iPhone e pensada para primeiro plano
-- ainda nao existe criptografia ponta a ponta
-- ainda nao existe deploy de producao pronto no repositorio
-
-## Pagina recomendada para comecar
-
-Se voce quer entender o todo primeiro, comece em [Arquitetura](Arquitetura.md).
-
-Se voce quer rodar logo, comece em [Como rodar](Como-Rodar.md).

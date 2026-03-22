@@ -3,3 +3,11 @@ declare module "simple-peer/simplepeer.min.js" {
   export default Peer;
 }
 
+interface MediaDevices {
+  selectAudioOutput?: (options?: { deviceId?: string }) => Promise<MediaDeviceInfo>;
+}
+
+interface HTMLMediaElement {
+  setSinkId?(sinkId: string): Promise<void>;
+  sinkId?: string;
+}

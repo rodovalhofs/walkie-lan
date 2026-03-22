@@ -1,110 +1,122 @@
 # Funcionalidades Atuais do Site
 
-Esta pagina lista o que a web app tem hoje, literalmente no estado atual do codigo.
+Esta pagina lista o que o site tem hoje, no estado atual do codigo da V2.
 
-## Estados de interface
+## Estados principais da interface
 
-A web tem hoje dois estados principais:
+O site tem hoje dois estados de alto nivel:
 
-- tela inicial
+- tela publica inicial
 - tela de sala
 
-## Tela inicial
+## Tela publica inicial
 
-A tela inicial tem:
+Ela tem:
 
-- faixa `Walkie-Talkie LAN Hibrido`
-- titulo `Android hospeda. iPhone entra pelo navegador.`
-- texto de apoio sobre Wi-Fi, codigo curto, canais fixos, PTT e WebRTC
-- lista de destaques
+- faixa `Walkie LAN open source`
+- titulo `Android protagonista. Navegador como apoio leve.`
+- texto explicando o reposicionamento do produto
+- botao para abrir/fechar `laboratorio avancado`
+- link para a wiki do projeto
+- tres cards de explicacao:
+  - criar no Android
+  - entrar na rede local
+  - usar web como console
+- card `Fluxo recomendado`
+- card `Perfil local`
+- card `Console auxiliar`
+
+## Dados editaveis na tela publica
+
+- apelido do operador
+
+## Laboratorio avancado
+
+Quando aberto, o site mostra:
+
+- bloco `Conexao manual`
 - campo `URL do servidor`
-- campo `Seu apelido`
-- area `Criar sala`
+- bloco `Host web experimental`
 - campo `Nome da sala`
 - campo `Canais`
-- preview `Canais previstos`
-- botao `Host no navegador`
-- texto explicando que esse host web e um modo de debug
-- area `Entrar por codigo`
+- preview dos canais
+- botao `Host web experimental`
+- bloco `Entrar por codigo`
 - campo `Codigo da sala`
-- botao `Entrar da web app`
-- texto explicando foco em Safari/iPhone com HTTPS
-- banner de erro quando algo falha
-
-## Valores padrao
-
-- URL do servidor: `http://<host-atual>:8787`
-- apelido: `Operador`
-- nome da sala: `Equipe LAN`
-- canais: `Geral, Operacao, Suporte`
-- codigo da sala: vazio
+- botao `Entrar como console`
+- botao `Entrar como web experimental`
+- banner de erro, quando necessario
 
 ## Tela da sala
 
-A tela da sala tem:
+A tela da sala mostra:
 
-- etiqueta `Sala ativa`
+- etiqueta de contexto:
+  - `Console auxiliar`
+  - `Web experimental`
+  - ou `Sala ativa`
 - nome da sala
 - codigo da sala
+- modo de transporte
+- estado de conexao
 - status do host
-- status de conexao
-- indicador `Microfone pronto` ou `Microfone pendente`
-- indicador `Transmitindo` ou `Escuta`
-- lista de botoes de canal
-- nome de quem esta falando em cada canal, ou `Livre`
-- botao `Habilitar microfone` ou `Revalidar microfone`
-- botao grande `Aperte para falar`
-- aviso textual dinamico dentro da sala
-- area `Presenca`
-- lista de participantes
-- canal atual de cada participante
-- badge do participante, como `Host`, `ios_web` ou `android_web_debug`
-- area `Eventos recentes`
-- lista dos 8 eventos mais recentes
-- `AudioDock` escondido para os audios remotos
+- endpoint local quando presente
+- status badges de conexao, microfone e transmissao
+
+## Area de controle da sala
+
+A area principal da sala tem:
+
+- lista de canais
+- indicador de locutor por canal ou `Livre`
+- painel informando o canal atual
+- se a sessao for `console_only`:
+  - aviso de console auxiliar
+- se a sessao for `experimental_web_voice`:
+  - botao `Habilitar microfone`
+  - seletor de saida de audio quando suportado
+  - mensagem de saida de audio
+  - botao PTT grande
+
+## Area de participantes
+
+Ela mostra:
+
+- apelido
+- canal atual
+- badge com papel do participante
+- estado de conexao
+
+## Area de eventos
+
+Ela mostra:
+
+- lista dos eventos mais recentes
+- resumo do evento
+- horario formatado em `pt-BR`
 
 ## Comportamentos atuais
 
-- cria sala pela API
-- entra por codigo pela API
+- cria sala no laboratorio avancado
+- entra por codigo no laboratorio avancado
+- entra como `console_only`
+- entra como `experimental_web_voice`
 - abre WebSocket
 - envia `hello`
 - recebe snapshot
 - atualiza presenca
-- troca de canal
-- solicita fala
-- libera fala
-- recebe `offer`
-- recebe `answer`
-- recebe `ice-candidate`
+- troca canal
+- solicita e libera fala no modo experimental
 - cria e destroi peers com `simple-peer`
-- reproduz audio remoto em elementos `<audio>`
+- toca audio remoto em elementos `<audio>`
+- tenta selecionar saida de audio quando suportado
 - salva `deviceId` no `localStorage`
 - registra service worker
 - funciona como PWA
 
-## Modo host web
+## O que o site nao faz como fluxo principal
 
-O site ainda pode ser host em modo de debug.
-
-Nesse modo:
-
-- cria a sala
-- age como host autoritativo para PTT
-- responde `talk_granted`
-- responde `talk_denied`
-- responde `talk_released`
-
-## O que o site nao tem hoje
-
-- login
-- senha
-- cadastro
-- lista publica de salas
-- chat de texto
-- anexos
-- tela de configuracoes
-- criptografia ponta a ponta exposta na UI
-- descoberta automatica LAN na web
-- gravacao de audio
-- controle de volume por participante
+- nao e o host oficial do produto
+- nao e a experiencia principal de voz
+- nao faz descoberta LAN como cliente oficial
+- nao substitui o APK Android em PTT operacional
