@@ -1,24 +1,24 @@
-# Code of Conduct
+# Código de conduta
 
-## Our commitment
+## Compromisso
 
-We want Walkie LAN to be a friendly, practical, and respectful open-source project.
+Queremos que o Walkie LAN seja um projeto open source respeitoso, acolhedor e útil.
 
-## Expected behavior
+## Esperamos da comunidade
 
-- Be respectful and constructive
-- Assume good intent
-- Focus on improving the project
-- Accept feedback with professionalism
+- respeito nas discussões
+- críticas construtivas
+- colaboração de boa-fé
+- foco no problema e não em ataques pessoais
 
-## Unacceptable behavior
+## Não será aceito
 
-- Harassment or personal attacks
-- Hate speech or discrimination
-- Deliberate disruption of community discussions
-- Publishing private information without permission
+- assédio
+- discriminação
+- ataques pessoais
+- linguagem abusiva
+- exposição de informações privadas sem permissão
 
-## Enforcement
+## Aplicação
 
-Project maintainers may remove comments, issues, pull requests, or contributions
-that violate this code of conduct.
+Os mantenedores podem editar, ocultar ou remover conteúdos que prejudiquem a comunidade ou desrespeitem este código de conduta.

@@ -1,33 +1,53 @@
-# Contributing
+# Como contribuir
 
-Thanks for your interest in improving Walkie LAN.
+Obrigado por querer melhorar o Walkie LAN.
 
-## Development setup
+Este projeto ainda está em fase inicial, então contribuições pequenas e objetivas ajudam bastante.
 
-1. Install Node.js and npm
-2. Run `npm install`
-3. Start the local services with `npm run dev:server` and `npm run dev:web`
-4. For Android changes, open `apps/android-host` in Android Studio
+## Antes de começar
 
-## Before opening a pull request
+1. faça um fork do repositório
+2. crie uma branch para sua alteração
+3. mantenha o escopo focado
+4. descreva claramente o que foi alterado
 
-- Keep changes focused
-- Run `npm run build`
-- Run `npm test`
-- If you changed the Android app, build the debug APK with `.\gradlew.bat :app:assembleDebug`
-- Update docs when behavior changes
+## Preparando o ambiente
 
-## Pull requests
+1. instale Node.js e npm
+2. rode `npm install`
+3. inicie o servidor com `npm run dev:server`
+4. inicie a web com `npm run dev:web`
+5. para Android, abra `apps/android-host` no Android Studio
 
-- Use a short descriptive title
-- Explain what changed and how it was tested
-- Mention limitations or follow-up work if something is still incomplete
+## Boas práticas para pull requests
 
-## Issues
+- prefira PRs pequenas
+- explique o problema e a solução
+- diga como você testou
+- atualize a documentação se o comportamento mudou
 
-When reporting a bug, include:
+## Checklist antes de abrir PR
 
-- device and OS
-- browser, if relevant
-- exact steps to reproduce
-- logs or screenshots when possible
+- `npm run build`
+- `npm test`
+- se mexeu no Android, `.\gradlew.bat :app:assembleDebug`
+- verifique se não deixou arquivos de build ou dados locais no commit
+
+## Ao reportar bugs
+
+Inclua, se possível:
+
+- dispositivo e sistema operacional
+- navegador, se for problema web
+- passos para reproduzir
+- mensagens de erro
+- prints ou logs
+
+## Tipos de contribuição bem-vindos
+
+- correção de bugs
+- melhoria de UX
+- melhoria de documentação
+- testes
+- deploy e automação
+- melhorias de áudio/PTT

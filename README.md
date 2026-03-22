@@ -1,167 +1,246 @@
 # Walkie LAN
 
-Open-source hybrid LAN walkie-talkie for small teams.
+Walkie-talkie híbrido em rede local, com Android como host principal e entrada web por código curto.
 
-Android hosts the room and offers the best operator experience. Web clients join by short code, which makes it possible to test with iPhone users through the browser while keeping the control flow simple.
+Este projeto foi criado para cenários simples de operação em LAN/Wi-Fi, em que uma pessoa no Android cria a sala e outros participantes entram pelo navegador ou por outro Android. A proposta é entregar uma experiência de push-to-talk enxuta, aberta e fácil de testar.
 
-## Current status
+## Visão geral
 
-This repository is an MVP that already supports:
+O fluxo atual funciona assim:
 
-- Android host creates a room with a short code
-- Web client joins by room code
-- Presence, channel state, and event log
-- Push-to-talk control flow with a single speaker per channel
-- WebRTC signaling between Android and web
-- Local debugging with an Android emulator, a real Android phone, and browser clients
+1. O Android cria uma sala.
+2. O servidor de sinalização gera um código curto.
+3. Outro participante entra pelo navegador usando esse código.
+4. O host continua autoritativo no controle dos canais e da fala.
 
-This repository does not yet provide:
+Hoje o projeto já é suficiente para:
 
-- End-to-end encryption
-- Offline iPhone microphone support without HTTPS
-- A production deployment bundle with a hosted signaling backend out of the box
-- Play Store / App Store packaging
+- criar sala com código curto
+- entrar na sala por navegador
+- ver presença, canais e eventos
+- usar a base de push-to-talk com um locutor por canal
+- testar Android + web no mesmo ambiente local
 
-## Repository layout
+## O que este projeto é
+
+- um MVP funcional
+- um projeto open source
+- uma base para evoluir um rádio LAN moderno
+- um ponto de partida para testes com Android e iPhone via navegador
+
+## O que este projeto ainda não é
+
+- um produto pronto para lojas
+- uma solução com criptografia ponta a ponta
+- uma solução pronta para uso 100% sem backend de apoio
+- uma solução finalizada de produção com deploy automatizado
+
+## Estrutura do repositório
 
 ```text
 apps/
-  android-host/       Android app in Kotlin + Jetpack Compose
-  signaling-server/   REST + WebSocket bootstrap/signaling server
-  web-client/         React + Vite web app / PWA
+  android-host/       App Android em Kotlin + Jetpack Compose
+  signaling-server/   Servidor REST + WebSocket para bootstrap e sinalização
+  web-client/         Cliente web/PWA em React + Vite
 packages/
-  protocol/           Shared protocol schemas and types
+  protocol/           Tipos e contratos compartilhados entre web, servidor e Android
 ```
 
-## Requirements
+## Tecnologias usadas
 
-- Node.js 20+
-- npm 10+
-- JDK 17+ for Android builds
-- Android Studio + Android SDK for APK builds
-- Windows, macOS, or Linux for server/web development
+- Android: Kotlin, Jetpack Compose, OkHttp, WebRTC
+- Web: React, Vite, simple-peer, WebRTC
+- Servidor: Node.js, Express, WebSocket, Zod
+- Monorepo: npm workspaces
 
-## Quick start
+## Requisitos
 
-### 1. Install dependencies
+Para rodar o projeto localmente, você vai precisar de:
+
+- Node.js 20 ou superior
+- npm 10 ou superior
+- JDK 17 ou superior
+- Android Studio + Android SDK para gerar APK
+
+## Como iniciar rapidamente
+
+### 1. Instalar dependências
 
 ```bash
 npm install
 ```
 
-The shared `@walkie/protocol` package is built automatically after install so the server and web client can start from a clean clone.
+Depois do `npm install`, o pacote compartilhado `@walkie/protocol` é gerado automaticamente para que web e servidor já funcionem em um clone limpo.
 
-### 2. Start the signaling server
+### 2. Iniciar o servidor de sinalização
 
 ```bash
 npm run dev:server
 ```
 
-Default server URL:
+Endereço padrão:
 
 ```text
 http://localhost:8787
 ```
 
-Health endpoint:
+Teste rápido de saúde:
 
 ```text
 http://localhost:8787/health
 ```
 
-### 3. Start the web client
+### 3. Iniciar a aplicação web
 
-In another terminal:
+Em outro terminal:
 
 ```bash
 npm run dev:web
 ```
 
-Default web URL:
+Endereço padrão:
 
 ```text
 http://localhost:5173
 ```
 
-### 4. Build the Android debug APK
+### 4. Gerar a APK Android
 
 ```powershell
 cd apps/android-host
 .\gradlew.bat :app:assembleDebug
 ```
 
-APK output:
+Saída da APK:
 
 ```text
 apps/android-host/app/build/outputs/apk/debug/app-debug.apk
 ```
 
-### 5. Test locally
+## Como testar localmente
 
-Use the same Wi-Fi network for every real device involved.
+## Cenário 1: emulador Android + servidor no PC
 
-For the Android app:
+- abra o app Android no emulador
+- use `http://10.0.2.2:8787` como endereço do servidor
+- crie uma sala
 
-- On the Android emulator, use `http://10.0.2.2:8787`
-- On a real Android phone, use your computer IP, for example `http://192.168.1.29:8787`
+## Cenário 2: Android real + navegador em outro dispositivo
 
-For the web client:
+1. conecte tudo na mesma rede Wi-Fi
+2. descubra o IP do seu computador
+3. rode o servidor e a web no seu computador
+4. no Android, use `http://SEU_IP:8787`
+5. no navegador do outro aparelho, abra `http://SEU_IP:5173`
 
-- Open `http://YOUR_PC_IP:5173` from another device on the same network
+Exemplo:
 
-## Real-device testing notes
+```text
+http://192.168.1.29:8787
+http://192.168.1.29:5173
+```
 
-### Android phone
+## Como descobrir o IP do computador no Windows
 
-1. Install the APK
-2. Start the signaling server on your computer
-3. Open the Android app
-4. Fill the server URL with your computer IP and port `8787`
-5. Create a room
+```powershell
+ipconfig
+```
 
-### Browser client
+Procure por `Endereço IPv4` no adaptador da rede Wi-Fi.
 
-1. Open the web client from another device
-2. Point it to the signaling server URL
-3. Join with the room code shown by the host
+## Variáveis de ambiente
 
-### iPhone / Safari
-
-For real microphone capture in Safari/WebKit, the web page should be served over HTTPS. Local HTTP can be enough for flow validation, but production-like iPhone audio tests should use a secure origin.
-
-## Environment variables
-
-The signaling server supports:
+O servidor aceita:
 
 - `PORT`
 - `PUBLIC_HTTP_BASE_URL`
 - `PUBLIC_WS_BASE_URL`
 
-See [.env.example](.env.example).
+Veja o arquivo [.env.example](.env.example).
 
-## Useful commands
+## Comandos úteis
+
+Build geral:
 
 ```bash
 npm run build
+```
+
+Testes:
+
+```bash
 npm test
 ```
 
-Android:
+APK debug:
 
 ```powershell
 cd apps/android-host
 .\gradlew.bat :app:assembleDebug
 ```
 
-Install with `adb`:
+Instalar APK com `adb`:
 
 ```powershell
 C:\Users\yurir\AppData\Local\Android\Sdk\platform-tools\adb.exe install -r apps\android-host\app\build\outputs\apk\debug\app-debug.apk
 ```
 
-## Troubleshooting
+## Como funciona a arquitetura
 
-### The Android emulator cannot reach the server
+### Android
+
+O Android é o host principal da sala e entrega a melhor experiência operacional. Ele mantém o estado da sessão, participa do fluxo de sinalização e atua como referência de controle para o push-to-talk.
+
+### Servidor
+
+O servidor é pequeno e tem foco em bootstrap e sinalização:
+
+- cria salas
+- gera código curto
+- recebe entrada por código
+- mantém o canal WebSocket
+- repassa mensagens de sinalização entre os peers
+
+### Web
+
+A web existe para ampliar compatibilidade, especialmente para testes e entrada por navegador em iPhone. Ela não substitui a experiência nativa Android, mas permite que mais pessoas entrem na sala sem instalar app nativo.
+
+## Limitações atuais
+
+- iPhone com microfone na web funciona melhor em origem segura HTTPS
+- ainda não há criptografia ponta a ponta
+- ainda não há deploy de produção configurado
+- o fluxo PTT ainda é MVP e pode receber refinamentos
+
+## Solução de problemas
+
+### O Android real não conecta no servidor
+
+Confira:
+
+- se o servidor está rodando
+- se você usou o IP do computador e não `localhost`
+- se computador e telefone estão na mesma rede
+- se a porta `8787` está liberada no firewall
+
+### O navegador parece estar carregando versão antiga
+
+Faça:
+
+- pare `npm run dev:server` e `npm run dev:web`
+- suba os dois de novo
+- recarregue a página com força
+- se for PWA instalada, remova e abra novamente
+
+### O app Android fecha sozinho
+
+Capture o log:
+
+```powershell
+C:\Users\yurir\AppData\Local\Android\Sdk\platform-tools\adb.exe logcat
+```
+
+### O emulador Android não acha o servidor
 
 Use:
 
@@ -169,34 +248,32 @@ Use:
 http://10.0.2.2:8787
 ```
 
-### A real phone cannot reach the server
+## Roadmap sugerido
 
-- Make sure the phone and computer are on the same Wi-Fi
-- Use your computer LAN IP, not `localhost`
-- Make sure the server is running
-- Check Windows Firewall for port `8787`
-
-### The web app seems outdated after a fix
-
-- Stop old `npm run dev:server` and `npm run dev:web` processes
-- Start both again
-- Hard refresh the browser
-- If installed as a PWA, remove it and open it again
-
-### The Android app crashes while testing
-
-Capture logs:
-
-```powershell
-C:\Users\yurir\AppData\Local\Android\Sdk\platform-tools\adb.exe logcat
-```
+- melhorar estabilidade do áudio/PTT
+- publicar backend de sinalização
+- servir web por HTTPS para testes reais em iPhone
+- gerar build release assinada
+- melhorar UX da tela principal
 
 ## Open source
 
-This project is released under the MIT license. See [LICENSE](LICENSE).
+Licença:
 
-Contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) and [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md).
+- [LICENSE](LICENSE)
 
-## CI
+Como contribuir:
 
-GitHub Actions is included in [.github/workflows/ci.yml](.github/workflows/ci.yml) to run build and test checks on pushes and pull requests.
+- [CONTRIBUTING.md](CONTRIBUTING.md)
+
+Conduta da comunidade:
+
+- [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)
+
+CI:
+
+- [GitHub Actions](.github/workflows/ci.yml)
+
+## Estado atual do repositório
+
+O repositório está público e pronto para colaboração. A documentação principal está em português e o projeto já pode ser clonado, instalado e executado localmente.
